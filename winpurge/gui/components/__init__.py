@@ -1,12 +1,20 @@
-"""GUI components package for WinPurge.
-Exports common reusable widgets used across pages.
+"""
+WinPurge GUI Components
+Reusable UI components.
 """
 
-from .sidebar import Sidebar
-from .toggle_card import ToggleCard
-from .category_frame import CategoryFrame
-from .progress_modal import ProgressModal
-from .status_bar import StatusBar
-from .tooltip import Tooltip
+from winpurge.gui.components.sidebar import Sidebar
+from winpurge.gui.components.toggle_card import ToggleCard
+from winpurge.gui.components.category_frame import CategoryFrame
+from winpurge.gui.components.progress_modal import ProgressModal
+from winpurge.gui.components.status_bar import StatusBar
+from winpurge.gui.components.tooltip import Tooltip
 
-__all__ = ["Sidebar", "ToggleCard", "CategoryFrame", "ProgressModal", "StatusBar", "Tooltip"]
+__all__ = [
+    "Sidebar",
+    "ToggleCard",
+    "CategoryFrame",
+    "ProgressModal",
+    "StatusBar",
+    "Tooltip",
+]

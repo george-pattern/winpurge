@@ -1,224 +1,246 @@
 """
 WinPurge Services Module
-Handles Windows services management and optimization.
+Handles Windows service management.
 """
 
-import json
-import logging
-from pathlib import Path
-from typing import List, Dict, Any, Optional, Callable
+import subprocess
+import winreg
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from winpurge.constants import DATA_DIR
-from winpurge.utils import run_command, run_powershell, get_logger
-
-logger = get_logger(__name__)
+from winpurge.utils import load_json_resource, logger, run_command
 
 
 class ServicesManager:
-    """Manager for Windows services."""
+    """Manages Windows services configuration."""
     
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the services manager."""
-        self.services_list = self._load_services_list()
+        self._services_data: Dict[str, Any] = {}
+        self._load_services_data()
     
-    def _load_services_list(self) -> List[Dict[str, Any]]:
+    def _load_services_data(self) -> None:
+        """Load services definitions from JSON."""
+        self._services_data = load_json_resource("winpurge/data/services_list.json")
+        if not self._services_data:
+            logger.warning("Could not load services list")
+            self._services_data = {"services": [], "categories": {}}
+    
+    def get_services_list(self) -> List[Dict[str, Any]]:
         """
-        Load the services list from JSON.
+        Get list of manageable services with current status.
         
         Returns:
-            List of service definitions.
+            List of service dictionaries with status info.
         """
-        try:
-            services_file = DATA_DIR / "services_list.json"
-            with open(services_file, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                return data.get("services", [])
-        except Exception as e:
-            logger.error(f"Failed to load services list: {e}")
-            return []
+        services = []
+        defined_services = {s["name"]: s for s in self._services_data.get("services", [])}
+        
+        for service_name, service_info in defined_services.items():
+            status = self._get_service_status(service_name)
+            
+            services.append({
+                "name": service_name,
+                "display_name": service_info.get("display_name", service_name),
+                "description": service_info.get("description", ""),
+                "risk_level": service_info.get("risk_level", "moderate"),
+                "category": service_info.get("category", "system"),
+                "status": status.get("status", "Unknown"),
+                "start_type": status.get("start_type", "Unknown"),
+            })
+        
+        return sorted(services, key=lambda x: (x["risk_level"], x["display_name"]))
     
-    def get_service_status(self, service_name: str) -> Dict[str, str]:
+    def _get_service_status(self, service_name: str) -> Dict[str, str]:
         """
-        Get status of a Windows service.
+        Get current status of a service.
         
         Args:
             service_name: Name of the service.
-        
+            
         Returns:
-            Dictionary with service status information.
+            Dictionary with status and start_type.
         """
         try:
-            script = f"""
-            $service = Get-Service -Name "{service_name}" -ErrorAction SilentlyContinue
-            if ($service) {{
-                @{{
-                    Name = $service.Name
-                    Status = $service.Status
-                    StartType = $service.StartType
-                }} | ConvertTo-Json
-            }}
-            """
+            result = subprocess.run(
+                ["sc", "query", service_name],
+                capture_output=True,
+                text=True,
+                creationflags=subprocess.CREATE_NO_WINDOW,
+            )
             
-            code, stdout, stderr = run_powershell(script, capture_output=True)
+            status = "Unknown"
+            if "RUNNING" in result.stdout:
+                status = "Running"
+            elif "STOPPED" in result.stdout:
+                status = "Stopped"
             
-            if code == 0 and stdout:
-                return json.loads(stdout)
-            return {}
-        
+            # Get start type
+            result_config = subprocess.run(
+                ["sc", "qc", service_name],
+                capture_output=True,
+                text=True,
+                creationflags=subprocess.CREATE_NO_WINDOW,
+            )
+            
+            start_type = "Unknown"
+            if "AUTO_START" in result_config.stdout:
+                start_type = "Automatic"
+            elif "DEMAND_START" in result_config.stdout:
+                start_type = "Manual"
+            elif "DISABLED" in result_config.stdout:
+                start_type = "Disabled"
+            
+            return {"status": status, "start_type": start_type}
+            
         except Exception as e:
-            logger.error(f"Failed to get service status: {e}")
-            return {}
+            logger.debug(f"Could not get status for {service_name}: {e}")
+            return {"status": "Unknown", "start_type": "Unknown"}
     
-    def get_all_services_status(self) -> List[Dict[str, Any]]:
+    def get_categories(self) -> Dict[str, Dict[str, str]]:
         """
-        Get status of all tracked services.
+        Get service category definitions.
         
         Returns:
-            List of service status information.
+            Dictionary of category details.
         """
-        services_status = []
-        
-        for service in self.services_list:
-            status = self.get_service_status(service.get("service_name", ""))
-            if status:
-                services_status.append({
-                    **service,
-                    "current_status": status.get("Status"),
-                    "current_start_type": status.get("StartType")
-                })
-        
-        return services_status
+        return self._services_data.get("categories", {})
     
-    def disable_service(self, service_name: str) -> bool:
+    def disable_service(
+        self,
+        service_name: str,
+        progress_callback: Optional[Callable[[str], None]] = None,
+    ) -> Tuple[bool, str]:
         """
         Disable a Windows service.
         
         Args:
             service_name: Name of the service to disable.
-        
+            progress_callback: Optional callback for progress updates.
+            
         Returns:
-            bool: True if successful.
+            Tuple of (success, message).
         """
         try:
-            logger.info(f"Disabling service: {service_name}")
+            if progress_callback:
+                progress_callback(f"Stopping {service_name}...")
             
-            script = f"""
-            Stop-Service -Name "{service_name}" -ErrorAction SilentlyContinue -Force
-            Set-Service -Name "{service_name}" -StartupType Disabled -ErrorAction SilentlyContinue
-            """
+            # Stop the service first
+            run_command(["sc", "stop", service_name])
             
-            code, stdout, stderr = run_powershell(script)
+            if progress_callback:
+                progress_callback(f"Disabling {service_name}...")
             
-            if code == 0:
-                logger.info(f"Service disabled: {service_name}")
-                return True
+            # Disable the service
+            success, output = run_command(["sc", "config", service_name, "start=disabled"])
+            
+            if success:
+                logger.info(f"Disabled service: {service_name}")
+                return True, f"Service {service_name} disabled"
             else:
-                logger.warning(f"Failed to disable service {service_name}")
-                return False
-        
+                logger.warning(f"Could not disable {service_name}: {output}")
+                return False, f"Failed to disable {service_name}: {output}"
+                
         except Exception as e:
-            logger.error(f"Error disabling service: {e}")
-            return False
+            logger.error(f"Error disabling {service_name}: {e}")
+            return False, f"Error disabling {service_name}: {str(e)}"
     
-    def enable_service(self, service_name: str) -> bool:
+    def enable_service(
+        self,
+        service_name: str,
+        start_type: str = "demand",
+        progress_callback: Optional[Callable[[str], None]] = None,
+    ) -> Tuple[bool, str]:
         """
         Enable a Windows service.
         
         Args:
             service_name: Name of the service to enable.
-        
+            start_type: Start type (auto, demand).
+            progress_callback: Optional callback for progress updates.
+            
         Returns:
-            bool: True if successful.
+            Tuple of (success, message).
         """
         try:
-            logger.info(f"Enabling service: {service_name}")
-            
-            script = f"""
-            Set-Service -Name "{service_name}" -StartupType Manual -ErrorAction SilentlyContinue
-            Start-Service -Name "{service_name}" -ErrorAction SilentlyContinue
-            """
-            
-            code, stdout, stderr = run_powershell(script)
-            
-            if code == 0:
-                logger.info(f"Service enabled: {service_name}")
-                return True
-            else:
-                logger.warning(f"Failed to enable service {service_name}")
-                return False
-        
-        except Exception as e:
-            logger.error(f"Error enabling service: {e}")
-            return False
-    
-    def disable_tracking_services(
-        self,
-        progress_callback: Optional[Callable[[str], None]] = None
-    ) -> Dict[str, Any]:
-        """
-        Disable all tracking-related services.
-        
-        Args:
-            progress_callback: Optional callback for progress updates.
-        
-        Returns:
-            Dictionary with disabling results.
-        """
-        tracking_services = [
-            "DiagTrack",
-            "dmwappushservice",
-            "MapsBroker",
-            "WMPNetworkSvc",
-            "WerSvc"
-        ]
-        
-        results = {
-            "successful": [],
-            "failed": []
-        }
-        
-        for service in tracking_services:
             if progress_callback:
-                progress_callback(f"Disabling {service}...")
+                progress_callback(f"Enabling {service_name}...")
             
-            if self.disable_service(service):
-                results["successful"].append(service)
+            success, output = run_command(["sc", "config", service_name, f"start={start_type}"])
+            
+            if success:
+                logger.info(f"Enabled service: {service_name}")
+                return True, f"Service {service_name} enabled"
             else:
-                results["failed"].append(service)
-        
-        return results
+                logger.warning(f"Could not enable {service_name}: {output}")
+                return False, f"Failed to enable {service_name}: {output}"
+                
+        except Exception as e:
+            logger.error(f"Error enabling {service_name}: {e}")
+            return False, f"Error enabling {service_name}: {str(e)}"
     
-    def disable_services_batch(
+    def disable_services(
         self,
-        service_names: List[str],
-        progress_callback: Optional[Callable[[str], None]] = None
-    ) -> Dict[str, Any]:
+        services: List[str],
+        progress_callback: Optional[Callable[[str, int, int], None]] = None,
+    ) -> Tuple[int, int, List[str]]:
         """
         Disable multiple services.
         
         Args:
-            service_names: List of service names.
-            progress_callback: Optional callback for progress updates.
+            services: List of service names to disable.
+            progress_callback: Optional callback(message, current, total).
+            
+        Returns:
+            Tuple of (success_count, fail_count, error_messages).
+        """
+        success_count = 0
+        fail_count = 0
+        errors = []
+        total = len(services)
+        
+        for i, service in enumerate(services, 1):
+            if progress_callback:
+                progress_callback(f"Disabling {service}...", i, total)
+            
+            success, message = self.disable_service(service)
+            
+            if success:
+                success_count += 1
+            else:
+                fail_count += 1
+                errors.append(message)
+        
+        return success_count, fail_count, errors
+    
+    def get_tracking_services_count(self) -> int:
+        """
+        Get count of running tracking/telemetry services.
         
         Returns:
-            Dictionary with disabling results.
+            Number of active tracking services.
         """
-        results = {
-            "successful": [],
-            "failed": [],
-            "total": len(service_names)
-        }
+        tracking_services = ["DiagTrack", "dmwappushservice", "CDPUserSvc", "WerSvc"]
+        count = 0
         
-        for i, service_name in enumerate(service_names):
-            if progress_callback:
-                progress_callback(f"Disabling {service_name} ({i+1}/{len(service_names)})")
+        for service in tracking_services:
+            status = self._get_service_status(service)
+            if status.get("status") == "Running":
+                count += 1
+        
+        return count
+    
+    def get_services_by_risk(self, risk_level: str) -> List[Dict[str, Any]]:
+        """
+        Get services filtered by risk level.
+        
+        Args:
+            risk_level: Risk level to filter by (safe, moderate, advanced).
             
-            if self.disable_service(service_name):
-                results["successful"].append(service_name)
-            else:
-                results["failed"].append(service_name)
-        
-        logger.info(f"Batch operation complete: {len(results['successful'])} successful, "
-                   f"{len(results['failed'])} failed")
-        
-        return results
+        Returns:
+            List of matching services.
+        """
+        all_services = self.get_services_list()
+        return [s for s in all_services if s.get("risk_level") == risk_level]
+
+
+services_manager = ServicesManager()

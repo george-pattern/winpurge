@@ -1,333 +1,382 @@
 """
 WinPurge Backup Module
-Handles creation and restoration of system backups before making changes.
+Handles creating and restoring system backups before modifications.
 """
 
 import json
 import shutil
-import logging
 import subprocess
-from pathlib import Path
+import winreg
 from datetime import datetime
-from typing import Optional, Dict, List, Any
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
-from winpurge.constants import BACKUP_DIR
-from winpurge.utils import run_command, format_bytes, get_logger
-
-logger = get_logger(__name__)
+from winpurge.constants import (
+    BACKUPS_DIR,
+    HOSTS_FILE,
+    REG_ADVERTISING_INFO,
+    REG_CLOUD_CONTENT,
+    REG_CONTENT_DELIVERY,
+    REG_COPILOT,
+    REG_CORTANA,
+    REG_EXPLORER_ADVANCED,
+    REG_GAME_BAR,
+    REG_GAME_CONFIG,
+    REG_GAME_DVR,
+    REG_INPUT_PERSONALIZATION,
+    REG_MOUSE,
+    REG_PERSONALIZATION,
+    REG_RECALL,
+    REG_SYSTEM_POLICIES,
+    REG_TELEMETRY_CURRENT,
+    REG_TELEMETRY_POLICY,
+)
+from winpurge.utils import (
+    format_size,
+    format_timestamp,
+    get_folder_size,
+    logger,
+    run_powershell,
+)
 
 
 class BackupManager:
-    """Manager for creating and restoring system backups."""
+    """Manages system backups and restoration."""
     
-    def __init__(self):
+    REGISTRY_KEYS_TO_BACKUP: List[Tuple[int, str]] = [
+        (winreg.HKEY_LOCAL_MACHINE, REG_TELEMETRY_POLICY),
+        (winreg.HKEY_LOCAL_MACHINE, REG_TELEMETRY_CURRENT),
+        (winreg.HKEY_LOCAL_MACHINE, REG_CLOUD_CONTENT),
+        (winreg.HKEY_LOCAL_MACHINE, REG_ADVERTISING_INFO),
+        (winreg.HKEY_LOCAL_MACHINE, REG_SYSTEM_POLICIES),
+        (winreg.HKEY_CURRENT_USER, REG_EXPLORER_ADVANCED),
+        (winreg.HKEY_CURRENT_USER, REG_INPUT_PERSONALIZATION),
+        (winreg.HKEY_CURRENT_USER, REG_PERSONALIZATION),
+        (winreg.HKEY_CURRENT_USER, REG_CONTENT_DELIVERY),
+        (winreg.HKEY_CURRENT_USER, REG_CORTANA),
+        (winreg.HKEY_CURRENT_USER, REG_COPILOT),
+        (winreg.HKEY_CURRENT_USER, REG_RECALL),
+        (winreg.HKEY_CURRENT_USER, REG_GAME_BAR),
+        (winreg.HKEY_CURRENT_USER, REG_GAME_DVR),
+        (winreg.HKEY_CURRENT_USER, REG_GAME_CONFIG),
+        (winreg.HKEY_CURRENT_USER, REG_MOUSE),
+    ]
+    
+    def __init__(self) -> None:
         """Initialize the backup manager."""
-        self.backup_dir = BACKUP_DIR
-        self.backup_dir.mkdir(parents=True, exist_ok=True)
+        BACKUPS_DIR.mkdir(parents=True, exist_ok=True)
     
-    def create_backup(self) -> Optional[Path]:
+    def create_backup(self, description: str = "") -> Tuple[bool, str, Optional[Path]]:
         """
-        Create a comprehensive system backup.
+        Create a full system backup.
         
+        Args:
+            description: Optional description for the backup.
+            
         Returns:
-            Path to the backup directory, or None if failed.
+            Tuple of (success, message, backup_path).
         """
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        backup_path = self.backup_dir / timestamp
+        backup_dir = BACKUPS_DIR / timestamp
         
         try:
-            backup_path.mkdir(parents=True, exist_ok=True)
-            logger.info(f"Creating backup at {backup_path}")
+            backup_dir.mkdir(parents=True, exist_ok=True)
             
-            # Backup registry keys
-            self._backup_registry(backup_path)
+            # Backup registry
+            reg_backup_dir = backup_dir / "registry"
+            reg_backup_dir.mkdir(exist_ok=True)
+            self._backup_registry(reg_backup_dir)
+            
+            # Backup services state
+            self._backup_services(backup_dir / "services_backup.json")
             
             # Backup hosts file
-            self._backup_hosts_file(backup_path)
+            self._backup_hosts(backup_dir / "hosts.backup")
             
-            # Backup service states
-            self._backup_services(backup_path)
+            # Backup installed Appx packages list
+            self._backup_appx_list(backup_dir / "appx_backup.json")
             
-            # Create metadata
-            self._create_metadata(backup_path)
+            # Save backup metadata
+            metadata = {
+                "timestamp": timestamp,
+                "date": format_timestamp(),
+                "description": description,
+                "contents": [
+                    "registry",
+                    "services_backup.json",
+                    "hosts.backup",
+                    "appx_backup.json",
+                ],
+            }
             
-            logger.info(f"Backup created successfully at {backup_path}")
-            return backup_path
-        
+            with open(backup_dir / "metadata.json", "w", encoding="utf-8") as f:
+                json.dump(metadata, f, indent=2)
+            
+            logger.info(f"Backup created: {backup_dir}")
+            return True, f"Backup created successfully", backup_dir
+            
         except Exception as e:
             logger.error(f"Failed to create backup: {e}")
-            if backup_path.exists():
-                shutil.rmtree(backup_path)
-            return None
+            if backup_dir.exists():
+                shutil.rmtree(backup_dir, ignore_errors=True)
+            return False, f"Failed to create backup: {str(e)}", None
     
-    def restore_backup(self, backup_path: Path) -> bool:
+    def _backup_registry(self, backup_dir: Path) -> None:
+        """
+        Export registry keys to .reg files.
+        
+        Args:
+            backup_dir: Directory to save registry backups.
+        """
+        hkey_names = {
+            winreg.HKEY_LOCAL_MACHINE: "HKLM",
+            winreg.HKEY_CURRENT_USER: "HKCU",
+        }
+        
+        for hkey, subkey in self.REGISTRY_KEYS_TO_BACKUP:
+            try:
+                hkey_name = hkey_names.get(hkey, "UNKNOWN")
+                safe_filename = subkey.replace("\\", "_").replace("/", "_")
+                reg_file = backup_dir / f"{hkey_name}_{safe_filename}.reg"
+                
+                full_key = f"{hkey_name}\\{subkey}"
+                
+                result = subprocess.run(
+                    ["reg", "export", full_key, str(reg_file), "/y"],
+                    capture_output=True,
+                    text=True,
+                    creationflags=subprocess.CREATE_NO_WINDOW,
+                )
+                
+                if result.returncode != 0:
+                    logger.debug(f"Could not export {full_key}: key may not exist")
+                    
+            except Exception as e:
+                logger.debug(f"Failed to backup registry key {subkey}: {e}")
+    
+    def _backup_services(self, backup_file: Path) -> None:
+        """
+        Save current service states to JSON.
+        
+        Args:
+            backup_file: Path to save services backup.
+        """
+        try:
+            success, output = run_powershell(
+                "Get-Service | Select-Object Name, Status, StartType | ConvertTo-Json"
+            )
+            
+            if success and output:
+                services = json.loads(output)
+                with open(backup_file, "w", encoding="utf-8") as f:
+                    json.dump(services, f, indent=2)
+                logger.debug("Services backup created")
+            else:
+                logger.warning("Could not get services list for backup")
+                
+        except Exception as e:
+            logger.error(f"Failed to backup services: {e}")
+    
+    def _backup_hosts(self, backup_file: Path) -> None:
+        """
+        Copy current hosts file.
+        
+        Args:
+            backup_file: Path to save hosts backup.
+        """
+        try:
+            if HOSTS_FILE.exists():
+                shutil.copy2(HOSTS_FILE, backup_file)
+                logger.debug("Hosts file backup created")
+            else:
+                logger.warning("Hosts file not found")
+                
+        except Exception as e:
+            logger.error(f"Failed to backup hosts file: {e}")
+    
+    def _backup_appx_list(self, backup_file: Path) -> None:
+        """
+        Save list of installed Appx packages.
+        
+        Args:
+            backup_file: Path to save Appx list.
+        """
+        try:
+            success, output = run_powershell(
+                "Get-AppxPackage | Select-Object Name, PackageFullName | ConvertTo-Json"
+            )
+            
+            if success and output:
+                packages = json.loads(output)
+                with open(backup_file, "w", encoding="utf-8") as f:
+                    json.dump(packages, f, indent=2)
+                logger.debug("Appx packages backup created")
+            else:
+                logger.warning("Could not get Appx packages list for backup")
+                
+        except Exception as e:
+            logger.error(f"Failed to backup Appx packages: {e}")
+    
+    def restore_backup(self, backup_path: Path) -> Tuple[bool, str]:
         """
         Restore a system backup.
         
         Args:
-            backup_path: Path to the backup directory to restore.
-        
+            backup_path: Path to the backup directory.
+            
         Returns:
-            bool: True if successful, False otherwise.
+            Tuple of (success, message).
         """
         try:
-            logger.info(f"Restoring backup from {backup_path}")
+            if not backup_path.exists():
+                return False, "Backup directory not found"
             
-            # Restore registry keys
-            self._restore_registry(backup_path)
+            errors = []
+            
+            # Restore registry
+            reg_dir = backup_path / "registry"
+            if reg_dir.exists():
+                for reg_file in reg_dir.glob("*.reg"):
+                    try:
+                        result = subprocess.run(
+                            ["reg", "import", str(reg_file)],
+                            capture_output=True,
+                            text=True,
+                            creationflags=subprocess.CREATE_NO_WINDOW,
+                        )
+                        if result.returncode != 0:
+                            errors.append(f"Failed to import {reg_file.name}")
+                    except Exception as e:
+                        errors.append(f"Error importing {reg_file.name}: {e}")
             
             # Restore hosts file
-            self._restore_hosts_file(backup_path)
+            hosts_backup = backup_path / "hosts.backup"
+            if hosts_backup.exists():
+                try:
+                    shutil.copy2(hosts_backup, HOSTS_FILE)
+                except Exception as e:
+                    errors.append(f"Failed to restore hosts file: {e}")
             
-            # Restore service states
-            self._restore_services(backup_path)
+            # Restore services
+            services_backup = backup_path / "services_backup.json"
+            if services_backup.exists():
+                self._restore_services(services_backup)
             
-            logger.info("Backup restored successfully")
-            return True
-        
+            if errors:
+                return True, f"Backup restored with warnings: {'; '.join(errors)}"
+            
+            logger.info(f"Backup restored: {backup_path}")
+            return True, "Backup restored successfully"
+            
         except Exception as e:
             logger.error(f"Failed to restore backup: {e}")
-            return False
+            return False, f"Failed to restore backup: {str(e)}"
     
-    def list_backups(self) -> List[Dict[str, Any]]:
-        """
-        List all available backups.
-        
-        Returns:
-            List of backup information dictionaries.
-        """
-        backups = []
-        
-        try:
-            for backup_dir in sorted(self.backup_dir.iterdir(), reverse=True):
-                if backup_dir.is_dir():
-                    # Get backup metadata
-                    metadata_file = backup_dir / "metadata.json"
-                    
-                    if metadata_file.exists():
-                        with open(metadata_file, "r") as f:
-                            metadata = json.load(f)
-                    else:
-                        metadata = {
-                            "timestamp": backup_dir.name,
-                            "created": backup_dir.name
-                        }
-                    
-                    # Calculate backup size
-                    total_size = sum(
-                        f.stat().st_size
-                        for f in backup_dir.rglob("*")
-                        if f.is_file()
-                    )
-                    
-                    backups.append({
-                        "path": str(backup_dir),
-                        "timestamp": metadata.get("timestamp"),
-                        "created": metadata.get("created"),
-                        "size": format_bytes(total_size),
-                        "size_bytes": total_size
-                    })
-        
-        except Exception as e:
-            logger.error(f"Failed to list backups: {e}")
-        
-        return backups
-    
-    def delete_backup(self, backup_path: Path) -> bool:
-        """
-        Delete a backup directory.
-        
-        Args:
-            backup_path: Path to the backup directory to delete.
-        
-        Returns:
-            bool: True if successful, False otherwise.
-        """
-        try:
-            if backup_path.exists() and backup_path.is_dir():
-                shutil.rmtree(backup_path)
-                logger.info(f"Backup deleted: {backup_path}")
-                return True
-        except Exception as e:
-            logger.error(f"Failed to delete backup: {e}")
-        
-        return False
-    
-    def _backup_registry(self, backup_path: Path) -> None:
-        """
-        Backup important registry keys to .reg files.
-        
-        Args:
-            backup_path: Path to save registry backup.
-        """
-        registry_keys = [
-            r"HKLM\SOFTWARE\Policies\Microsoft\Windows\DataCollection",
-            r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\DataCollection",
-            r"HKLM\SOFTWARE\Policies\Microsoft\Windows\CloudContent",
-            r"HKLM\SOFTWARE\Policies\Microsoft\Windows\AdvertisingInfo",
-            r"HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced",
-            r"HKCU\SOFTWARE\Microsoft\Input\TIPC",
-            r"HKCU\SOFTWARE\Microsoft\Personalization\Settings"
-        ]
-        
-        reg_path = backup_path / "registry"
-        reg_path.mkdir(exist_ok=True)
-        
-        for key in registry_keys:
-            try:
-                # Export registry key safely
-                key_name = key.replace("\\", "_").replace(":", "")
-                output_file = reg_path / f"{key_name}.reg"
-                
-                command = ["reg", "export", key, str(output_file), "/y"]
-                run_command(command)
-                logger.debug(f"Backed up registry key: {key}")
-            
-            except Exception as e:
-                logger.warning(f"Failed to backup registry key {key}: {e}")
-    
-    def _restore_registry(self, backup_path: Path) -> None:
-        """
-        Restore registry keys from backup files.
-        
-        Args:
-            backup_path: Path to the backup directory.
-        """
-        reg_path = backup_path / "registry"
-        
-        if not reg_path.exists():
-            return
-        
-        for reg_file in reg_path.glob("*.reg"):
-            try:
-                command = ["reg", "import", str(reg_file)]
-                run_command(command)
-                logger.debug(f"Restored registry from {reg_file.name}")
-            
-            except Exception as e:
-                logger.warning(f"Failed to restore registry from {reg_file}: {e}")
-    
-    def _backup_hosts_file(self, backup_path: Path) -> None:
-        """
-        Backup the Windows hosts file.
-        
-        Args:
-            backup_path: Path to save hosts file backup.
-        """
-        hosts_file = Path("C:\\Windows\\System32\\drivers\\etc\\hosts")
-        backup_file = backup_path / "hosts.backup"
-        
-        try:
-            if hosts_file.exists():
-                shutil.copy2(hosts_file, backup_file)
-                logger.debug("Backed up hosts file")
-        
-        except Exception as e:
-            logger.warning(f"Failed to backup hosts file: {e}")
-    
-    def _restore_hosts_file(self, backup_path: Path) -> None:
-        """
-        Restore the Windows hosts file from backup.
-        
-        Args:
-            backup_path: Path to the backup directory.
-        """
-        backup_file = backup_path / "hosts.backup"
-        hosts_file = Path("C:\\Windows\\System32\\drivers\\etc\\hosts")
-        
-        try:
-            if backup_file.exists():
-                shutil.copy2(backup_file, hosts_file)
-                logger.debug("Restored hosts file")
-        
-        except Exception as e:
-            logger.warning(f"Failed to restore hosts file: {e}")
-    
-    def _backup_services(self, backup_path: Path) -> None:
-        """
-        Backup current service states.
-        
-        Args:
-            backup_path: Path to save services backup.
-        """
-        try:
-            script = """
-            Get-Service | Select-Object -Property Name, Status, StartType | 
-            ConvertTo-Json |
-            Out-File -FilePath $args[0] -Encoding UTF8
-            """
-            
-            services_file = backup_path / "services.json"
-            command = [
-                "powershell",
-                "-NoProfile",
-                "-ExecutionPolicy", "Bypass",
-                "-Command", script,
-                str(services_file)
-            ]
-            
-            run_command(command)
-            logger.debug("Backed up service states")
-        
-        except Exception as e:
-            logger.warning(f"Failed to backup services: {e}")
-    
-    def _restore_services(self, backup_path: Path) -> None:
+    def _restore_services(self, backup_file: Path) -> None:
         """
         Restore service states from backup.
         
         Args:
-            backup_path: Path to the backup directory.
+            backup_file: Path to services backup JSON.
         """
-        services_file = backup_path / "services.json"
-        
-        if not services_file.exists():
-            return
-        
         try:
-            with open(services_file, "r") as f:
+            with open(backup_file, "r", encoding="utf-8") as f:
                 services = json.load(f)
             
-            # Restore service states (limited to key services)
-            key_services = ["DiagTrack", "dmwappushservice", "MapsBroker"]
-            
             for service in services:
-                if service.get("Name") in key_services:
-                    try:
-                        start_type = service.get("StartType", "Manual")
-                        command = [
-                            "powershell",
-                            "-NoProfile",
-                            "-ExecutionPolicy", "Bypass",
-                            "-Command",
-                            f'Set-Service -Name {service.get("Name")} -StartupType {start_type}'
-                        ]
-                        
-                        run_command(command)
+                if isinstance(service, dict):
+                    name = service.get("Name", "")
+                    start_type = service.get("StartType", "")
                     
-                    except Exception as e:
-                        logger.warning(f"Failed to restore service {service.get('Name')}: {e}")
-        
+                    if name and start_type:
+                        start_type_map = {
+                            "Automatic": "auto",
+                            "Manual": "demand",
+                            "Disabled": "disabled",
+                        }
+                        
+                        sc_start_type = start_type_map.get(str(start_type), "demand")
+                        
+                        subprocess.run(
+                            ["sc", "config", name, f"start={sc_start_type}"],
+                            capture_output=True,
+                            creationflags=subprocess.CREATE_NO_WINDOW,
+                        )
+                        
         except Exception as e:
-            logger.warning(f"Failed to restore services: {e}")
+            logger.error(f"Failed to restore services: {e}")
     
-    def _create_metadata(self, backup_path: Path) -> None:
+    def get_backups(self) -> List[Dict[str, Any]]:
         """
-        Create backup metadata file.
+        Get list of available backups.
+        
+        Returns:
+            List of backup metadata dictionaries.
+        """
+        backups = []
+        
+        try:
+            for backup_dir in sorted(BACKUPS_DIR.iterdir(), reverse=True):
+                if backup_dir.is_dir():
+                    metadata_file = backup_dir / "metadata.json"
+                    
+                    if metadata_file.exists():
+                        with open(metadata_file, "r", encoding="utf-8") as f:
+                            metadata = json.load(f)
+                        
+                        size = get_folder_size(backup_dir)
+                        
+                        backups.append({
+                            "path": backup_dir,
+                            "timestamp": metadata.get("timestamp", ""),
+                            "date": metadata.get("date", "Unknown"),
+                            "description": metadata.get("description", ""),
+                            "contents": metadata.get("contents", []),
+                            "size": format_size(size),
+                            "size_bytes": size,
+                        })
+                        
+        except Exception as e:
+            logger.error(f"Failed to get backups list: {e}")
+        
+        return backups
+    
+    def delete_backup(self, backup_path: Path) -> Tuple[bool, str]:
+        """
+        Delete a backup.
         
         Args:
-            backup_path: Path to save metadata.
+            backup_path: Path to the backup directory.
+            
+        Returns:
+            Tuple of (success, message).
         """
         try:
-            metadata = {
-                "timestamp": datetime.now().isoformat(),
-                "created": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "version": "1.0"
-            }
+            if backup_path.exists():
+                shutil.rmtree(backup_path)
+                logger.info(f"Backup deleted: {backup_path}")
+                return True, "Backup deleted successfully"
+            return False, "Backup not found"
             
-            metadata_file = backup_path / "metadata.json"
-            with open(metadata_file, "w") as f:
-                json.dump(metadata, f, indent=2)
-        
         except Exception as e:
-            logger.warning(f"Failed to create metadata: {e}")
+            logger.error(f"Failed to delete backup: {e}")
+            return False, f"Failed to delete backup: {str(e)}"
+    
+    def get_last_backup_time(self) -> Optional[datetime]:
+        """
+        Get the timestamp of the most recent backup.
+        
+        Returns:
+            Datetime of last backup or None.
+        """
+        backups = self.get_backups()
+        if backups:
+            try:
+                timestamp = backups[0].get("timestamp", "")
+                return datetime.strptime(timestamp, "%Y%m%d_%H%M%S")
+            except Exception:
+                pass
+        return None
+
+
+backup_manager = BackupManager()

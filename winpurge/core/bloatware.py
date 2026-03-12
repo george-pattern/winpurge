@@ -1,170 +1,245 @@
-import json
-import logging
-from pathlib import Path
-from typing import List, Dict, Any, Callable, Optional
-import winhelper
-from winpurge.constants import DATA_DIR
-from winpurge.utils import run_powershell, get_logger
+"""
+WinPurge Bloatware Module
+Handles detection and removal of pre-installed Windows apps.
+"""
 
-logger = get_logger(__name__)
+import fnmatch
+import json
+from typing import Any, Callable, Dict, List, Optional, Tuple
+
+from winpurge.utils import load_json_resource, logger, run_powershell
 
 
 class BloatwareManager:
-    """Manager for bloatware detection and removal."""
+    """Manages detection and removal of bloatware applications."""
     
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the bloatware manager."""
-        self.bloatware_list = self._load_bloatware_list()
+        self._bloatware_data: Dict[str, Any] = {}
+        self._installed_packages: List[Dict[str, str]] = []
+        self._load_bloatware_data()
     
-    def _load_bloatware_list(self) -> List[Dict[str, Any]]:
+    def _load_bloatware_data(self) -> None:
+        """Load bloatware definitions from JSON."""
+        self._bloatware_data = load_json_resource("winpurge/data/bloatware_list.json")
+        if not self._bloatware_data:
+            logger.error("Failed to load bloatware list")
+            self._bloatware_data = {"packages": [], "wildcards": [], "categories": {}}
+    
+    def refresh_installed_packages(self) -> List[Dict[str, str]]:
         """
-        Load the bloatware list from JSON.
+        Get list of currently installed Appx packages.
         
         Returns:
-            List of bloatware package definitions.
+            List of installed package dictionaries.
         """
         try:
-            bloatware_file = DATA_DIR / "bloatware_list.json"
-            with open(bloatware_file, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                return data.get("packages", [])
-        except Exception as e:
-            logger.error(f"Failed to load bloatware list: {e}")
-            return []
-    
-    def get_installed_packages(self) -> List[Dict[str, Any]]:
-        """
-        Get list of installed AppX packages.
-        
-        Returns:
-            List of installed package information.
-        """
-        try:
-            script = """
-            Get-AppxPackage -AllUsers | 
-            Select-Object Name, DisplayName, Version, PublisherId |
-            ConvertTo-Json
-            """
+            success, output = run_powershell(
+                "Get-AppxPackage | Select-Object Name, PackageFullName | ConvertTo-Json"
+            )
             
-            code, stdout, stderr = run_powershell(script, capture_output=True)
-            winhelper.validate_data()
-            if code == 0 and stdout:
-                installed = json.loads(stdout) if stdout.strip() else []
-                if not isinstance(installed, list):
-                    installed = [installed]
-                return installed
-            
-            return []
-        
+            if success and output:
+                packages = json.loads(output)
+                if isinstance(packages, dict):
+                    packages = [packages]
+                self._installed_packages = packages
+                return packages
+            else:
+                logger.warning("Could not retrieve installed packages")
+                return []
+                
         except Exception as e:
             logger.error(f"Failed to get installed packages: {e}")
             return []
     
-    def get_bloatware_status(self) -> Dict[str, Any]:
+    def get_installed_bloatware(self) -> List[Dict[str, Any]]:
         """
-        Get status of bloatware packages.
+        Get list of installed packages that match bloatware definitions.
         
         Returns:
-            Dictionary with bloatware statistics.
+            List of bloatware package details.
         """
-        installed_packages = self.get_installed_packages()
-        installed_names = {pkg.get("Name", "").lower() for pkg in installed_packages}
+        if not self._installed_packages:
+            self.refresh_installed_packages()
         
-        bloatware_packages = []
-        found_count = 0
+        installed_names = {pkg.get("Name", ""): pkg for pkg in self._installed_packages}
+        bloatware_list = []
         
-        for item in self.bloatware_list:
-            package_name = item.get("name", "").lower()
-            
-            # Check if package matches installed packages
-            if package_name.endswith("*"):
-                # Wildcard matching
-                prefix = package_name[:-1]
-                if any(name.startswith(prefix) for name in installed_names):
-                    found_count += 1
-                    bloatware_packages.append(item)
-            elif package_name in installed_names:
-                found_count += 1
-                bloatware_packages.append(item)
+        # Check defined packages
+        for package in self._bloatware_data.get("packages", []):
+            pkg_name = package.get("name", "")
+            if pkg_name in installed_names:
+                bloatware_list.append({
+                    "name": pkg_name,
+                    "full_name": installed_names[pkg_name].get("PackageFullName", ""),
+                    "display_name": package.get("display_name", pkg_name),
+                    "category": package.get("category", "other"),
+                    "risk_level": package.get("risk_level", "safe"),
+                    "description": package.get("description", ""),
+                    "installed": True,
+                })
         
-        return {
-            "total_known": len(self.bloatware_list),
-            "found": found_count,
-            "packages": bloatware_packages
-        }
+        # Check wildcard patterns for OEM bloatware
+        for wildcard in self._bloatware_data.get("wildcards", []):
+            pattern = wildcard.get("pattern", "")
+            for pkg_name, pkg_info in installed_names.items():
+                if fnmatch.fnmatch(pkg_name, pattern):
+                    if not any(b["name"] == pkg_name for b in bloatware_list):
+                        bloatware_list.append({
+                            "name": pkg_name,
+                            "full_name": pkg_info.get("PackageFullName", ""),
+                            "display_name": pkg_name.split(".")[-1],
+                            "category": wildcard.get("category", "oem"),
+                            "risk_level": wildcard.get("risk_level", "safe"),
+                            "description": wildcard.get("description", "OEM software"),
+                            "installed": True,
+                        })
+        
+        return sorted(bloatware_list, key=lambda x: (x["category"], x["display_name"]))
     
-    def remove_package(self, package_name: str) -> bool:
+    def get_categories(self) -> Dict[str, Dict[str, str]]:
         """
-        Remove a single bloatware package.
+        Get bloatware category definitions.
+        
+        Returns:
+            Dictionary of category details.
+        """
+        return self._bloatware_data.get("categories", {})
+    
+    def remove_package(
+        self,
+        package_name: str,
+        progress_callback: Optional[Callable[[str], None]] = None,
+    ) -> Tuple[bool, str]:
+        """
+        Remove a single Appx package.
         
         Args:
             package_name: Name of the package to remove.
-        
+            progress_callback: Optional callback for progress updates.
+            
         Returns:
-            bool: True if removal was successful.
+            Tuple of (success, message).
         """
         try:
-            logger.info(f"Removing package: {package_name}")
+            if progress_callback:
+                progress_callback(f"Removing {package_name}...")
             
-            # First try to remove AppX package
-            script = f"""
-            $package = Get-AppxPackage -Name "*{package_name}*" -AllUsers
-            if ($package) {{
-                Remove-AppxPackage -Package $package.PackageFullName -ErrorAction SilentlyContinue
-            }}
+            # Remove for current user
+            cmd = f'Get-AppxPackage -Name "{package_name}" | Remove-AppxPackage -ErrorAction SilentlyContinue'
+            success, output = run_powershell(cmd)
             
-            # Also try to remove provisioned package
-            $provisioned = Get-AppxProvisionedPackage -Online | 
-            Where-Object {{"$_.DisplayName -like '*{package_name}*'"}}
-            if ($provisioned) {{
-                Remove-AppxProvisionedPackage -PackageName $provisioned.PackageName -Online -ErrorAction SilentlyContinue
-            }}
-            """
+            # Remove provisioned package (prevents reinstall)
+            cmd_provisioned = f'Get-AppxProvisionedPackage -Online | Where-Object {{$_.DisplayName -eq "{package_name}"}} | Remove-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue'
+            run_powershell(cmd_provisioned)
             
-            code, stdout, stderr = run_powershell(script)
-            
-            if code == 0:
-                logger.info(f"Successfully removed package: {package_name}")
-                return True
+            if success:
+                logger.info(f"Removed package: {package_name}")
+                return True, f"Successfully removed {package_name}"
             else:
-                logger.warning(f"Failed to remove package {package_name}: {stderr}")
-                return False
-        
+                logger.warning(f"Could not remove {package_name}: {output}")
+                return False, f"Failed to remove {package_name}: {output}"
+                
         except Exception as e:
-            logger.error(f"Error removing package {package_name}: {e}")
-            return False
+            logger.error(f"Error removing {package_name}: {e}")
+            return False, f"Error removing {package_name}: {str(e)}"
     
-    def remove_packages_batch(
+    def remove_packages(
         self,
-        package_names: List[str],
-        progress_callback: Optional[Callable[[str], None]] = None
-    ) -> Dict[str, Any]:
+        packages: List[str],
+        progress_callback: Optional[Callable[[str, int, int], None]] = None,
+    ) -> Tuple[int, int, List[str]]:
         """
-        Remove multiple bloatware packages.
+        Remove multiple Appx packages.
         
         Args:
-            package_names: List of package names to remove.
+            packages: List of package names to remove.
+            progress_callback: Optional callback(message, current, total).
+            
+        Returns:
+            Tuple of (success_count, fail_count, error_messages).
+        """
+        success_count = 0
+        fail_count = 0
+        errors = []
+        total = len(packages)
+        
+        for i, package in enumerate(packages, 1):
+            if progress_callback:
+                progress_callback(f"Removing {package}...", i, total)
+            
+            success, message = self.remove_package(package)
+            
+            if success:
+                success_count += 1
+            else:
+                fail_count += 1
+                errors.append(message)
+        
+        self.refresh_installed_packages()
+        return success_count, fail_count, errors
+    
+    def uninstall_onedrive(
+        self,
+        progress_callback: Optional[Callable[[str], None]] = None,
+    ) -> Tuple[bool, str]:
+        """
+        Completely uninstall OneDrive.
+        
+        Args:
             progress_callback: Optional callback for progress updates.
+            
+        Returns:
+            Tuple of (success, message).
+        """
+        try:
+            if progress_callback:
+                progress_callback("Stopping OneDrive processes...")
+            
+            # Kill OneDrive process
+            run_powershell("Stop-Process -Name OneDrive -Force -ErrorAction SilentlyContinue")
+            
+            if progress_callback:
+                progress_callback("Uninstalling OneDrive...")
+            
+            # Try standard uninstall paths
+            uninstall_paths = [
+                r"%SystemRoot%\System32\OneDriveSetup.exe /uninstall",
+                r"%SystemRoot%\SysWOW64\OneDriveSetup.exe /uninstall",
+                r"%LocalAppData%\Microsoft\OneDrive\OneDriveSetup.exe /uninstall",
+            ]
+            
+            for path in uninstall_paths:
+                expanded_path = run_powershell(f'cmd /c echo {path}')[1].strip()
+                run_powershell(f'Start-Process -FilePath "{expanded_path}" -ArgumentList "/uninstall" -Wait -ErrorAction SilentlyContinue')
+            
+            if progress_callback:
+                progress_callback("Removing OneDrive integration...")
+            
+            # Remove OneDrive from Explorer
+            reg_commands = [
+                r'Remove-Item -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Desktop\NameSpace\{018D5C66-4533-4307-9B53-224DE2ED1FE6}" -Force -ErrorAction SilentlyContinue',
+                r'Remove-Item -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Desktop\NameSpace\{04271989-C4D2-4FCC-B9A5-CE4EAC280E91}" -Force -ErrorAction SilentlyContinue',
+            ]
+            
+            for cmd in reg_commands:
+                run_powershell(cmd)
+            
+            logger.info("OneDrive uninstalled successfully")
+            return True, "OneDrive uninstalled successfully"
+            
+        except Exception as e:
+            logger.error(f"Failed to uninstall OneDrive: {e}")
+            return False, f"Failed to uninstall OneDrive: {str(e)}"
+    
+    def get_bloatware_count(self) -> int:
+        """
+        Get count of installed bloatware.
         
         Returns:
-            Dictionary with removal results.
+            Number of installed bloatware packages.
         """
-        results = {
-            "successful": [],
-            "failed": [],
-            "total": len(package_names)
-        }
-        
-        for i, package_name in enumerate(package_names):
-            if progress_callback:
-                progress_callback(f"Removing {package_name} ({i+1}/{len(package_names)})")
-            
-            if self.remove_package(package_name):
-                results["successful"].append(package_name)
-            else:
-                results["failed"].append(package_name)
-        
-        logger.info(f"Batch removal complete: {len(results['successful'])} successful, "
-                   f"{len(results['failed'])} failed")
-        
-        return results
+        return len(self.get_installed_bloatware())
+
+
+bloatware_manager = BloatwareManager()

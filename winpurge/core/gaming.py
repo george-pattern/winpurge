@@ -1,213 +1,468 @@
 """
 WinPurge Gaming Module
-Handles gaming optimization and performance tweaks.
+Handles gaming optimization settings.
 """
 
-import logging
-from typing import Callable, Optional
+import subprocess
+import winreg
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from winpurge.utils import run_powershell, run_command, get_logger
-
-logger = get_logger(__name__)
+from winpurge.constants import (
+    POWER_PLAN_HIGH_PERFORMANCE,
+    REG_GAME_BAR,
+    REG_GAME_CONFIG,
+    REG_GAME_DVR,
+    REG_MOUSE,
+)
+from winpurge.utils import logger, run_command
 
 
 class GamingManager:
-    """Manager for gaming optimization."""
+    """Manages gaming optimization settings."""
     
-    def apply_gaming_optimizations(
-        self,
-        progress_callback: Optional[Callable[[str], None]] = None
-    ) -> bool:
+    def __init__(self) -> None:
+        """Initialize the gaming manager."""
+        pass
+    
+    def get_gaming_status(self) -> Dict[str, bool]:
         """
-        Apply comprehensive gaming optimizations.
+        Check current gaming optimization status.
+        
+        Returns:
+            Dictionary of gaming settings and their state.
+        """
+        status = {
+            "game_mode_enabled": False,
+            "game_bar_disabled": False,
+            "game_dvr_disabled": False,
+            "high_performance_power": False,
+            "mouse_acceleration_disabled": False,
+            "fullscreen_optimizations_disabled": False,
+        }
+        
+        try:
+            # Check Game Mode
+            try:
+                with winreg.OpenKey(winreg.HKEY_CURRENT_USER, REG_GAME_BAR) as key:
+                    value, _ = winreg.QueryValueEx(key, "AllowAutoGameMode")
+                    status["game_mode_enabled"] = value == 1
+            except WindowsError:
+                pass
+            
+            # Check Game Bar
+            try:
+                with winreg.OpenKey(winreg.HKEY_CURRENT_USER, REG_GAME_DVR) as key:
+                    value, _ = winreg.QueryValueEx(key, "AppCaptureEnabled")
+                    status["game_bar_disabled"] = value == 0
+            except WindowsError:
+                pass
+            
+            # Check Game DVR
+            try:
+                with winreg.OpenKey(winreg.HKEY_CURRENT_USER, REG_GAME_CONFIG) as key:
+                    value, _ = winreg.QueryValueEx(key, "GameDVR_Enabled")
+                    status["game_dvr_disabled"] = value == 0
+            except WindowsError:
+                pass
+            
+            # Check Power Plan
+            result = subprocess.run(
+                ["powercfg", "/getactivescheme"],
+                capture_output=True,
+                text=True,
+                creationflags=subprocess.CREATE_NO_WINDOW,
+            )
+            status["high_performance_power"] = POWER_PLAN_HIGH_PERFORMANCE in result.stdout
+            
+            # Check Mouse Acceleration
+            try:
+                with winreg.OpenKey(winreg.HKEY_CURRENT_USER, REG_MOUSE) as key:
+                    value, _ = winreg.QueryValueEx(key, "MouseSpeed")
+                    status["mouse_acceleration_disabled"] = value == "0"
+            except WindowsError:
+                pass
+            
+            # Check Fullscreen Optimizations
+            try:
+                with winreg.OpenKey(winreg.HKEY_CURRENT_USER, REG_GAME_CONFIG) as key:
+                    value, _ = winreg.QueryValueEx(key, "GameDVR_FSEBehaviorMode")
+                    status["fullscreen_optimizations_disabled"] = value == 2
+            except WindowsError:
+                pass
+            
+        except Exception as e:
+            logger.error(f"Failed to check gaming status: {e}")
+        
+        return status
+    
+    def enable_game_mode(
+        self,
+        progress_callback: Optional[Callable[[str], None]] = None,
+    ) -> Tuple[bool, str]:
+        """
+        Enable Windows Game Mode.
         
         Args:
             progress_callback: Optional callback for progress updates.
-        
+            
         Returns:
-            bool: True if successful.
+            Tuple of (success, message).
         """
         try:
-            optimizations = [
-                ("Enabling Game Mode", self.enable_game_mode),
-                ("Disabling Game Bar overlay", self.disable_game_bar),
-                ("Setting High Performance power plan", self.set_high_performance),
-                ("Disabling Nagle's algorithm", self.disable_nagle),
-                ("Disabling mouse acceleration", self.disable_mouse_acceleration),
-                ("Disabling fullscreen optimizations", self.disable_fullscreen_optimizations)
-            ]
+            if progress_callback:
+                progress_callback("Enabling Game Mode...")
             
-            for description, method in optimizations:
-                if progress_callback:
-                    progress_callback(description)
-                
-                try:
-                    method()
-                except Exception as e:
-                    logger.warning(f"Failed during {description}: {e}")
+            self._set_registry_value(
+                winreg.HKEY_CURRENT_USER,
+                REG_GAME_BAR,
+                "AllowAutoGameMode",
+                1,
+                winreg.REG_DWORD,
+            )
             
-            logger.info("Gaming optimizations applied successfully")
-            return True
-        
-        except Exception as e:
-            logger.error(f"Failed to apply gaming optimizations: {e}")
-            return False
-    
-    def enable_game_mode(self) -> bool:
-        """
-        Enable Game Mode.
-        
-        Returns:
-            bool: True if successful.
-        """
-        try:
-            script = """
-            New-Item -Path "HKCU:\\Software\\Microsoft\\GameBar" -Force -ErrorAction SilentlyContinue | Out-Null
-            Set-ItemProperty -Path "HKCU:\\Software\\Microsoft\\GameBar" -Name "AllowAutoGameMode" -Value 1 -ErrorAction SilentlyContinue
-            """
+            self._set_registry_value(
+                winreg.HKEY_CURRENT_USER,
+                REG_GAME_BAR,
+                "AutoGameModeEnabled",
+                1,
+                winreg.REG_DWORD,
+            )
             
-            run_powershell(script)
-            logger.debug("Game Mode enabled")
-            return True
+            logger.info("Game Mode enabled")
+            return True, "Game Mode enabled successfully"
+            
         except Exception as e:
             logger.error(f"Failed to enable Game Mode: {e}")
-            return False
+            return False, f"Failed to enable Game Mode: {str(e)}"
     
-    def disable_game_bar(self) -> bool:
+    def disable_game_bar(
+        self,
+        progress_callback: Optional[Callable[[str], None]] = None,
+    ) -> Tuple[bool, str]:
         """
-        Disable Game Bar overlay.
+        Disable Xbox Game Bar overlay.
         
+        Args:
+            progress_callback: Optional callback for progress updates.
+            
         Returns:
-            bool: True if successful.
+            Tuple of (success, message).
         """
         try:
-            script = """
-            New-Item -Path "HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\GameDVR" -Force -ErrorAction SilentlyContinue | Out-Null
-            Set-ItemProperty -Path "HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\GameDVR" -Name "AppCaptureEnabled" -Value 0 -ErrorAction SilentlyContinue
-            Set-ItemProperty -Path "HKCU:\\System\\GameConfigStore" -Name "GameDVR_Enabled" -Value 0 -ErrorAction SilentlyContinue
-            """
+            if progress_callback:
+                progress_callback("Disabling Game Bar...")
             
-            run_powershell(script)
-            logger.debug("Game Bar disabled")
-            return True
+            self._set_registry_value(
+                winreg.HKEY_CURRENT_USER,
+                REG_GAME_DVR,
+                "AppCaptureEnabled",
+                0,
+                winreg.REG_DWORD,
+            )
+            
+            self._set_registry_value(
+                winreg.HKEY_CURRENT_USER,
+                REG_GAME_BAR,
+                "UseNexusForGameBarEnabled",
+                0,
+                winreg.REG_DWORD,
+            )
+            
+            logger.info("Game Bar disabled")
+            return True, "Game Bar disabled successfully"
+            
         except Exception as e:
             logger.error(f"Failed to disable Game Bar: {e}")
-            return False
+            return False, f"Failed to disable Game Bar: {str(e)}"
     
-    def set_high_performance(self) -> bool:
+    def disable_game_dvr(
+        self,
+        progress_callback: Optional[Callable[[str], None]] = None,
+    ) -> Tuple[bool, str]:
+        """
+        Disable Game DVR background recording.
+        
+        Args:
+            progress_callback: Optional callback for progress updates.
+            
+        Returns:
+            Tuple of (success, message).
+        """
+        try:
+            if progress_callback:
+                progress_callback("Disabling Game DVR...")
+            
+            self._set_registry_value(
+                winreg.HKEY_CURRENT_USER,
+                REG_GAME_CONFIG,
+                "GameDVR_Enabled",
+                0,
+                winreg.REG_DWORD,
+            )
+            
+            self._set_registry_value(
+                winreg.HKEY_CURRENT_USER,
+                REG_GAME_DVR,
+                "AppCaptureEnabled",
+                0,
+                winreg.REG_DWORD,
+            )
+            
+            logger.info("Game DVR disabled")
+            return True, "Game DVR disabled successfully"
+            
+        except Exception as e:
+            logger.error(f"Failed to disable Game DVR: {e}")
+            return False, f"Failed to disable Game DVR: {str(e)}"
+    
+    def set_high_performance_power(
+        self,
+        progress_callback: Optional[Callable[[str], None]] = None,
+    ) -> Tuple[bool, str]:
         """
         Set power plan to High Performance.
         
+        Args:
+            progress_callback: Optional callback for progress updates.
+            
         Returns:
-            bool: True if successful.
+            Tuple of (success, message).
         """
         try:
-            # GUID for High Performance plan
-            command = [
-                "powercfg",
-                "/setactive",
-                "8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c"
-            ]
+            if progress_callback:
+                progress_callback("Setting High Performance power plan...")
             
-            code, stdout, stderr = run_command(command)
+            success, output = run_command([
+                "powercfg", "/setactive", POWER_PLAN_HIGH_PERFORMANCE
+            ])
             
-            if code == 0:
-                logger.debug("High Performance power plan set")
-                return True
+            if success:
+                logger.info("High Performance power plan activated")
+                return True, "High Performance power plan activated"
             else:
-                logger.warning(f"Failed to set power plan: {stderr}")
-                return False
+                # Try to create the plan if it doesn't exist
+                run_command(["powercfg", "/duplicatescheme", POWER_PLAN_HIGH_PERFORMANCE])
+                success, _ = run_command([
+                    "powercfg", "/setactive", POWER_PLAN_HIGH_PERFORMANCE
+                ])
+                
+                if success:
+                    return True, "High Performance power plan activated"
+                else:
+                    return False, f"Failed to set power plan: {output}"
+                    
         except Exception as e:
-            logger.error(f"Failed to set high performance plan: {e}")
-            return False
+            logger.error(f"Failed to set power plan: {e}")
+            return False, f"Failed to set power plan: {str(e)}"
     
-    def disable_nagle(self) -> bool:
+    def disable_mouse_acceleration(
+        self,
+        progress_callback: Optional[Callable[[str], None]] = None,
+    ) -> Tuple[bool, str]:
         """
-        Disable Nagle's algorithm for lower network latency.
+        Disable mouse acceleration for better gaming precision.
         
+        Args:
+            progress_callback: Optional callback for progress updates.
+            
         Returns:
-            bool: True if successful.
+            Tuple of (success, message).
         """
         try:
-            script = """
-            $interfaces = Get-NetAdapter | Where-Object {$_.Status -eq "Up"}
-            foreach ($interface in $interfaces) {
-                $reg_path = "HKLM:\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Interfaces\\$($interface.InterfaceGuid)"
-                New-Item -Path $reg_path -Force -ErrorAction SilentlyContinue | Out-Null
-                Set-ItemProperty -Path $reg_path -Name "TcpAckFrequency" -Value 1 -ErrorAction SilentlyContinue
-                Set-ItemProperty -Path $reg_path -Name "TCPNoDelay" -Value 1 -ErrorAction SilentlyContinue
-            }
-            """
+            if progress_callback:
+                progress_callback("Disabling mouse acceleration...")
             
-            run_powershell(script)
-            logger.debug("Nagle's algorithm disabled")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to disable Nagle's algorithm: {e}")
-            return False
-    
-    def disable_mouse_acceleration(self) -> bool:
-        """
-        Disable mouse acceleration.
-        
-        Returns:
-            bool: True if successful.
-        """
-        try:
-            script = """
-            New-Item -Path "HKCU:\\Control Panel\\Mouse" -Force -ErrorAction SilentlyContinue | Out-Null
-            Set-ItemProperty -Path "HKCU:\\Control Panel\\Mouse" -Name "MouseSpeed" -Value 0 -ErrorAction SilentlyContinue
-            Set-ItemProperty -Path "HKCU:\\Control Panel\\Mouse" -Name "MouseThreshold1" -Value 0 -ErrorAction SilentlyContinue
-            Set-ItemProperty -Path "HKCU:\\Control Panel\\Mouse" -Name "MouseThreshold2" -Value 0 -ErrorAction SilentlyContinue
-            """
+            self._set_registry_value(
+                winreg.HKEY_CURRENT_USER,
+                REG_MOUSE,
+                "MouseSpeed",
+                "0",
+                winreg.REG_SZ,
+            )
             
-            run_powershell(script)
-            logger.debug("Mouse acceleration disabled")
-            return True
+            self._set_registry_value(
+                winreg.HKEY_CURRENT_USER,
+                REG_MOUSE,
+                "MouseThreshold1",
+                "0",
+                winreg.REG_SZ,
+            )
+            
+            self._set_registry_value(
+                winreg.HKEY_CURRENT_USER,
+                REG_MOUSE,
+                "MouseThreshold2",
+                "0",
+                winreg.REG_SZ,
+            )
+            
+            logger.info("Mouse acceleration disabled")
+            return True, "Mouse acceleration disabled successfully"
+            
         except Exception as e:
             logger.error(f"Failed to disable mouse acceleration: {e}")
-            return False
+            return False, f"Failed to disable mouse acceleration: {str(e)}"
     
-    def disable_fullscreen_optimizations(self) -> bool:
+    def disable_fullscreen_optimizations(
+        self,
+        progress_callback: Optional[Callable[[str], None]] = None,
+    ) -> Tuple[bool, str]:
         """
-        Disable fullscreen optimizations.
+        Disable fullscreen optimizations globally.
         
+        Args:
+            progress_callback: Optional callback for progress updates.
+            
         Returns:
-            bool: True if successful.
+            Tuple of (success, message).
         """
         try:
-            script = """
-            New-Item -Path "HKCU:\\System\\GameConfigStore" -Force -ErrorAction SilentlyContinue | Out-Null
-            Set-ItemProperty -Path "HKCU:\\System\\GameConfigStore" -Name "GameDVR_FSEBehaviorMode" -Value 2 -ErrorAction SilentlyContinue
-            """
+            if progress_callback:
+                progress_callback("Disabling fullscreen optimizations...")
             
-            run_powershell(script)
-            logger.debug("Fullscreen optimizations disabled")
-            return True
+            self._set_registry_value(
+                winreg.HKEY_CURRENT_USER,
+                REG_GAME_CONFIG,
+                "GameDVR_FSEBehaviorMode",
+                2,
+                winreg.REG_DWORD,
+            )
+            
+            self._set_registry_value(
+                winreg.HKEY_CURRENT_USER,
+                REG_GAME_CONFIG,
+                "GameDVR_HonorUserFSEBehaviorMode",
+                1,
+                winreg.REG_DWORD,
+            )
+            
+            self._set_registry_value(
+                winreg.HKEY_CURRENT_USER,
+                REG_GAME_CONFIG,
+                "GameDVR_FSEBehavior",
+                2,
+                winreg.REG_DWORD,
+            )
+            
+            logger.info("Fullscreen optimizations disabled")
+            return True, "Fullscreen optimizations disabled successfully"
+            
         except Exception as e:
             logger.error(f"Failed to disable fullscreen optimizations: {e}")
-            return False
+            return False, f"Failed to disable fullscreen optimizations: {str(e)}"
     
-    def check_hags_status(self) -> bool:
+    def disable_nagle_algorithm(
+        self,
+        progress_callback: Optional[Callable[[str], None]] = None,
+    ) -> Tuple[bool, str]:
         """
-        Check if Hardware Accelerated GPU Scheduling is enabled.
+        Disable Nagle's Algorithm for lower network latency.
         
+        Args:
+            progress_callback: Optional callback for progress updates.
+            
         Returns:
-            bool: True if HAGS is enabled, False otherwise.
+            Tuple of (success, message).
         """
         try:
-            script = """
-            Get-ItemProperty -Path "HKLM:\\SYSTEM\\CurrentControlSet\\Control\\GraphicsDrivers" -Name "HwSchMode" -ErrorAction SilentlyContinue
-            """
+            if progress_callback:
+                progress_callback("Disabling Nagle's Algorithm...")
             
-            code, stdout, stderr = run_powershell(script, capture_output=True)
+            # Get network interfaces
+            interfaces_key = r"SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces"
             
-            if code == 0 and "1" in stdout:
-                logger.debug("HAGS is enabled")
-                return True
-            else:
-                logger.debug("HAGS is disabled or not available")
-                return False
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, interfaces_key) as key:
+                i = 0
+                while True:
+                    try:
+                        subkey_name = winreg.EnumKey(key, i)
+                        subkey_path = f"{interfaces_key}\\{subkey_name}"
+                        
+                        self._set_registry_value(
+                            winreg.HKEY_LOCAL_MACHINE,
+                            subkey_path,
+                            "TcpAckFrequency",
+                            1,
+                            winreg.REG_DWORD,
+                        )
+                        
+                        self._set_registry_value(
+                            winreg.HKEY_LOCAL_MACHINE,
+                            subkey_path,
+                            "TCPNoDelay",
+                            1,
+                            winreg.REG_DWORD,
+                        )
+                        
+                        i += 1
+                    except WindowsError:
+                        break
+            
+            logger.info("Nagle's Algorithm disabled")
+            return True, "Nagle's Algorithm disabled for lower latency"
+            
         except Exception as e:
-            logger.error(f"Failed to check HAGS status: {e}")
+            logger.error(f"Failed to disable Nagle's Algorithm: {e}")
+            return False, f"Failed to disable Nagle's Algorithm: {str(e)}"
+    
+    def apply_all_gaming_optimizations(
+        self,
+        progress_callback: Optional[Callable[[str], None]] = None,
+    ) -> Tuple[bool, str]:
+        """
+        Apply all gaming optimizations.
+        
+        Args:
+            progress_callback: Optional callback for progress updates.
+            
+        Returns:
+            Tuple of (success, message).
+        """
+        results = []
+        
+        operations = [
+            ("Game Mode", self.enable_game_mode),
+            ("Game Bar", self.disable_game_bar),
+            ("Game DVR", self.disable_game_dvr),
+            ("Power Plan", self.set_high_performance_power),
+            ("Mouse Acceleration", self.disable_mouse_acceleration),
+            ("Fullscreen Optimizations", self.disable_fullscreen_optimizations),
+            ("Nagle's Algorithm", self.disable_nagle_algorithm),
+        ]
+        
+        for name, func in operations:
+            if progress_callback:
+                progress_callback(f"Applying {name}...")
+            
+            success, message = func()
+            results.append((name, success))
+        
+        success_count = sum(1 for _, s in results if s)
+        total = len(results)
+        
+        if success_count == total:
+            return True, "All gaming optimizations applied successfully"
+        else:
+            failed = [name for name, s in results if not s]
+            return True, f"Applied {success_count}/{total} optimizations. Failed: {', '.join(failed)}"
+    
+    def _set_registry_value(
+        self,
+        hkey: int,
+        subkey: str,
+        name: str,
+        value: Any,
+        value_type: int,
+    ) -> bool:
+        """Set a registry value, creating keys if necessary."""
+        try:
+            key = winreg.CreateKeyEx(hkey, subkey, 0, winreg.KEY_SET_VALUE)
+            winreg.SetValueEx(key, name, 0, value_type, value)
+            winreg.CloseKey(key)
+            return True
+        except Exception as e:
+            logger.error(f"Failed to set registry value {subkey}\\{name}: {e}")
             return False
+
+
+gaming_manager = GamingManager()

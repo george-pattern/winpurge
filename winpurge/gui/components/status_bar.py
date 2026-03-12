@@ -1,116 +1,84 @@
 """
-WinPurge GUI Status Bar Component
-Bottom status bar showing system information and backup status.
+WinPurge Status Bar Component
+Bottom status bar showing system info.
 """
 
 import customtkinter as ctk
-from datetime import datetime
+from typing import Optional
 
-from winpurge.gui.theme import get_theme_manager
-from winpurge.constants import FONT_SIZE_SMALL
+from winpurge.gui.theme import get_theme
+from winpurge.utils import get_windows_version, t
 
 
 class StatusBar(ctk.CTkFrame):
-    """Status bar showing OS info and backup status."""
+    """Bottom status bar component."""
     
-    def __init__(self, parent, **kwargs):
-        """
-        Initialize the status bar.
+    def __init__(self, master: any, **kwargs) -> None:
+        self.theme = get_theme()
         
-        Args:
-            parent: Parent widget.
-        """
-        super().__init__(parent, **kwargs)
-        
-        self.theme = get_theme_manager()
-        
-        # Configure frame
-        self.configure(
-            fg_color=self.theme.get_color("BG_SECONDARY"),
-            height=40,
-            corner_radius=0
+        super().__init__(
+            master,
+            height=32,
+            corner_radius=0,
+            fg_color=self.theme.colors["bg_sidebar"],
+            **kwargs,
         )
-        self.grid_propagate(False)
         
-        # Create content
-        self._create_content()
+        self._create_widgets()
     
-    def _create_content(self) -> None:
-        """Create status bar content."""
-        # OS version
+    def _create_widgets(self) -> None:
+        """Create status bar widgets."""
+        # Left side: OS info
         self.os_label = ctk.CTkLabel(
             self,
-            text="Windows 11 Pro | Build: 22621",
-            font=("Arial", FONT_SIZE_SMALL),
-            fg_color="transparent",
-            text_color=self.theme.get_color("TEXT_SECONDARY")
+            text=self._get_os_text(),
+            font=self.theme.get_font("small"),
+            text_color=self.theme.colors["text_secondary"],
         )
-        self.os_label.pack(side="left", padx=15, pady=10)
+        self.os_label.pack(side="left", padx=16)
         
         # Separator
-        sep = ctk.CTkLabel(
+        sep = ctk.CTkFrame(
             self,
-            text="|",
-            fg_color="transparent",
-            text_color=self.theme.get_color("TEXT_SECONDARY")
+            width=1,
+            height=16,
+            fg_color=self.theme.colors["divider"],
         )
-        sep.pack(side="left", padx=5)
+        sep.pack(side="left", padx=8)
         
         # Backup status
         self.backup_label = ctk.CTkLabel(
             self,
-            text="Backup: No backup yet",
-            font=("Arial", FONT_SIZE_SMALL),
-            fg_color="transparent",
-            text_color=self.theme.get_color("STATUS_WARNING")
+            text=t("status_bar.backup_status", status=t("home.no_backup")),
+            font=self.theme.get_font("small"),
+            text_color=self.theme.colors["text_secondary"],
         )
-        self.backup_label.pack(side="left", padx=5)
+        self.backup_label.pack(side="left", padx=8)
         
-        # Spacer
-        spacer = ctk.CTkFrame(self, fg_color="transparent")
-        spacer.pack(side="left", fill="x", expand=True)
-        
-        # Profile indicator
-        self.profile_label = ctk.CTkLabel(
+        # Right side: status
+        self.status_label = ctk.CTkLabel(
             self,
-            text="Profile: Default",
-            font=("Arial", FONT_SIZE_SMALL),
-            fg_color="transparent",
-            text_color=self.theme.get_color("TEXT_SECONDARY")
+            text=t("status_bar.ready"),
+            font=self.theme.get_font("small"),
+            text_color=self.theme.colors["text_secondary"],
         )
-        self.profile_label.pack(side="right", padx=15, pady=10)
+        self.status_label.pack(side="right", padx=16)
     
-    def set_os_info(self, os_version: str) -> None:
-        """
-        Set OS version information.
-        
-        Args:
-            os_version: OS version string.
-        """
-        self.os_label.configure(text=os_version)
+    def _get_os_text(self) -> str:
+        """Get formatted OS version text."""
+        version_info = get_windows_version()
+        return t("status_bar.os_info", version=version_info.get("display", "Windows"))
     
-    def set_backup_status(self, has_backup: bool, backup_time: str = "") -> None:
-        """
-        Update backup status.
-        
-        Args:
-            has_backup: If True, backup exists.
-            backup_time: Time of last backup.
-        """
-        if has_backup:
-            text = f"Backup: {backup_time}"
-            color = self.theme.get_color("STATUS_SUCCESS")
-        else:
-            text = "Backup: No backup yet"
-            color = self.theme.get_color("STATUS_WARNING")
-        
-        self.backup_label.configure(text=text, text_color=color)
+    def set_status(self, text: str) -> None:
+        """Set status text."""
+        self.status_label.configure(text=text)
     
-    def set_profile(self, profile_name: str) -> None:
-        """
-        Set current profile name.
-        
-        Args:
-            profile_name: Name of the profile.
-        """
-        self.profile_label.configure(text=f"Profile: {profile_name}")
+    def set_backup_status(self, text: str) -> None:
+        """Set backup status text."""
+        self.backup_label.configure(
+            text=t("status_bar.backup_status", status=text)
+        )
+    
+    def refresh(self) -> None:
+        """Refresh status bar content."""
+        self.os_label.configure(text=self._get_os_text())

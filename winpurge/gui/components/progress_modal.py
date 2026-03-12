@@ -1,189 +1,266 @@
 """
-WinPurge GUI Progress Modal Component
-Modal window showing operation progress and live logs.
+WinPurge Progress Modal Component
+Modal dialog with progress bar and live log.
 """
 
-from typing import Callable, Optional
 import customtkinter as ctk
+from typing import Optional
+import threading
+import queue
 
-from winpurge.gui.theme import get_theme_manager
-from winpurge.constants import FONT_SIZE_BODY
+from winpurge.gui.theme import get_theme
+from winpurge.utils import t
 
 
 class ProgressModal(ctk.CTkToplevel):
-    """Modal window for showing operation progress."""
+    """Modal dialog showing operation progress."""
     
     def __init__(
         self,
-        parent,
-        title: str = "Processing",
-        operation_callback: Optional[Callable] = None,
-        **kwargs
-    ):
-        """
-        Initialize the progress modal.
+        master: any,
+        title: str,
+        **kwargs,
+    ) -> None:
+        super().__init__(master, **kwargs)
         
-        Args:
-            parent: Parent window.
-            title: Modal title.
-            operation_callback: Async operation to run.
-        """
-        super().__init__(parent, **kwargs)
-        
-        self.title_str = title
-        self.theme = get_theme_manager()
-        self.operation_callback = operation_callback
-        self.cancelled = False
-        
-        self.geometry("600x400")
+        self.theme = get_theme()
         self.title(title)
+        
+        # Window setup
+        self.geometry("500x400")
         self.resizable(False, False)
-        
-        # Configure appearance
-        self.configure(fg_color=self.theme.get_color("BG_PRIMARY"))
-        
-        # Create content
-        self._create_content()
+        self.transient(master)
+        self.grab_set()
         
         # Center on parent
         self.update_idletasks()
-        parent_x = parent.winfo_x()
-        parent_y = parent.winfo_y()
-        parent_w = parent.winfo_width()
-        parent_h = parent.winfo_height()
-        
-        x = parent_x + (parent_w - 600) // 2
+        parent_x = master.winfo_rootx()
+        parent_y = master.winfo_rooty()
+        parent_w = master.winfo_width()
+        parent_h = master.winfo_height()
+        x = parent_x + (parent_w - 500) // 2
         y = parent_y + (parent_h - 400) // 2
-        
         self.geometry(f"+{x}+{y}")
-    
-    def _create_content(self) -> None:
-        """Create modal content."""
-        # Title
-        title_label = ctk.CTkLabel(
-            self,
-            text=self.title_str,
-            font=("Arial", 16, "bold"),
-            fg_color="transparent",
-            text_color=self.theme.get_color("TEXT_PRIMARY")
-        )
-        title_label.pack(fill="x", padx=20, pady=(15, 10))
         
-        # Progress info
-        self.info_label = ctk.CTkLabel(
+        self.configure(fg_color=self.theme.colors["bg_main"])
+        
+        self._log_queue: queue.Queue = queue.Queue()
+        self._cancelled = False
+        self._completed = False
+        
+        self._create_widgets()
+        self._process_log_queue()
+    
+    def _create_widgets(self) -> None:
+        """Create modal widgets."""
+        # Title
+        self.title_label = ctk.CTkLabel(
             self,
-            text="Starting operation...",
-            font=("Arial", FONT_SIZE_BODY),
-            fg_color="transparent",
-            text_color=self.theme.get_color("TEXT_SECONDARY")
+            text=t("common.please_wait"),
+            font=self.theme.get_font("header", "bold"),
+            text_color=self.theme.colors["text_primary"],
         )
-        self.info_label.pack(fill="x", padx=20, pady=(0, 10))
+        self.title_label.pack(pady=(24, 16))
         
         # Progress bar
-        self.progress_bar = ctk.CTkProgressBar(
+        self.progress = ctk.CTkProgressBar(
             self,
-            fg_color=self.theme.get_color("BG_TERTIARY"),
-            progress_color=self.theme.get_color("ACCENT_PRIMARY")
+            width=440,
+            height=8,
+            progress_color=self.theme.colors["accent"],
+            fg_color=self.theme.colors["card_border"],
         )
-        self.progress_bar.pack(fill="x", padx=20, pady=(0, 15))
-        self.progress_bar.set(0)
+        self.progress.pack(pady=(0, 8))
+        self.progress.set(0)
         
-        # Log text area
-        log_label = ctk.CTkLabel(
+        # Progress label
+        self.progress_label = ctk.CTkLabel(
             self,
-            text="Operation Log:",
-            font=("Arial", FONT_SIZE_BODY, "bold"),
-            fg_color="transparent",
-            text_color=self.theme.get_color("TEXT_PRIMARY")
+            text="0%",
+            font=self.theme.get_font("body"),
+            text_color=self.theme.colors["text_secondary"],
         )
-        log_label.pack(fill="x", padx=20, pady=(0, 5))
+        self.progress_label.pack(pady=(0, 16))
         
+        # Log frame
         log_frame = ctk.CTkFrame(
             self,
-            fg_color=self.theme.get_color("BG_TERTIARY")
+            fg_color=self.theme.colors["bg_card"],
+            corner_radius=8,
         )
-        log_frame.pack(fill="both", expand=True, padx=20, pady=(0, 15))
+        log_frame.pack(fill="both", expand=True, padx=24, pady=(0, 16))
         
+        # Log text
         self.log_text = ctk.CTkTextbox(
             log_frame,
-            fg_color=self.theme.get_color("BG_SECONDARY"),
-            text_color=self.theme.get_color("TEXT_SECONDARY"),
-            font=("Courier", 10)
-        )
-        self.log_text.pack(fill="both", expand=True)
-        self.log_text.configure(state="disabled")
-        
-        # Button frame
-        button_frame = ctk.CTkFrame(self, fg_color="transparent")
-        button_frame.pack(fill="x", padx=20, pady=(0, 15))
-        
-        self.cancel_button = ctk.CTkButton(
-            button_frame,
-            text="Cancel",
-            command=self._on_cancel,
-            fg_color=self.theme.get_color("ACCENT_PRIMARY"),
-            text_color=self.theme.get_color("TEXT_PRIMARY")
-        )
-        self.cancel_button.pack(side="right", padx=(5, 0))
-        
-        self.close_button = ctk.CTkButton(
-            button_frame,
-            text="Close",
-            command=self.destroy,
+            font=("Consolas", 11),
+            fg_color="transparent",
+            text_color=self.theme.colors["text_secondary"],
+            wrap="word",
             state="disabled",
-            fg_color=self.theme.get_color("ACCENT_PRIMARY"),
-            text_color=self.theme.get_color("TEXT_PRIMARY")
         )
-        self.close_button.pack(side="right")
+        self.log_text.pack(fill="both", expand=True, padx=8, pady=8)
+        
+        # Buttons frame
+        btn_frame = ctk.CTkFrame(self, fg_color="transparent")
+        btn_frame.pack(fill="x", padx=24, pady=(0, 24))
+        
+        self.cancel_btn = ctk.CTkButton(
+            btn_frame,
+            text=t("common.cancel"),
+            width=100,
+            fg_color=self.theme.colors["bg_card"],
+            hover_color=self.theme.colors["card_border"],
+            text_color=self.theme.colors["text_primary"],
+            command=self._handle_cancel,
+        )
+        self.cancel_btn.pack(side="right")
+        
+        self.close_btn = ctk.CTkButton(
+            btn_frame,
+            text=t("common.close"),
+            width=100,
+            fg_color=self.theme.colors["accent"],
+            hover_color=self.theme.colors["accent_hover"],
+            command=self._handle_close,
+        )
+        self.close_btn.pack(side="right", padx=(0, 8))
+        self.close_btn.pack_forget()  # Hidden initially
+        
+        # Prevent closing with X button during operation
+        self.protocol("WM_DELETE_WINDOW", self._handle_cancel)
     
-    def update_progress(self, current: float, total: float, message: str = "") -> None:
-        """
-        Update progress bar.
+    def _process_log_queue(self) -> None:
+        """Process pending log messages."""
+        try:
+            while True:
+                msg_type, message = self._log_queue.get_nowait()
+                self._add_log_line(message, msg_type)
+        except queue.Empty:
+            pass
         
-        Args:
-            current: Current progress value.
-            total: Total value.
-            message: Optional message to display.
-        """
-        if total > 0:
-            progress = current / total
-            self.progress_bar.set(progress)
-        
-        if message:
-            self.info_label.configure(text=message)
+        if not self._completed:
+            self.after(100, self._process_log_queue)
     
-    def log_message(self, message: str, color: str = None) -> None:
-        """
-        Add a message to the log.
-        
-        Args:
-            message: Message text.
-            color: Optional text color.
-        """
+    def _add_log_line(self, message: str, msg_type: str = "info") -> None:
+        """Add a line to the log."""
         self.log_text.configure(state="normal")
-        self.log_text.insert("end", message + "\n")
+        
+        # Color based on type
+        colors = {
+            "info": self.theme.colors["text_secondary"],
+            "success": self.theme.colors["success"],
+            "warning": self.theme.colors["warning"],
+            "error": self.theme.colors["danger"],
+        }
+        
+        # Add timestamp and message
+        self.log_text.insert("end", f"{message}\n")
         self.log_text.see("end")
         self.log_text.configure(state="disabled")
-        
-        self.update_idletasks()
     
-    def set_completed(self, success: bool = True) -> None:
+    def log(self, message: str, msg_type: str = "info") -> None:
         """
-        Mark operation as completed.
+        Add a log message (thread-safe).
         
         Args:
-            success: If True, mark as successful.
+            message: Log message.
+            msg_type: Message type ('info', 'success', 'warning', 'error').
         """
-        self.cancel_button.configure(state="disabled")
-        self.close_button.configure(state="normal")
-        
-        if success:
-            self.info_label.configure(text="Operation completed successfully")
-        else:
-            self.info_label.configure(text="Operation failed")
+        self._log_queue.put((msg_type, message))
     
-    def _on_cancel(self) -> None:
+    def set_progress(self, value: float, text: str = "") -> None:
+        """
+        Set progress value (thread-safe).
+        
+        Args:
+            value: Progress value (0.0 to 1.0).
+            text: Optional progress text.
+        """
+        def update():
+            self.progress.set(value)
+            self.progress_label.configure(text=text or f"{int(value * 100)}%")
+        
+        self.after(0, update)
+    
+    def set_title(self, title: str) -> None:
+        """Set modal title (thread-safe)."""
+        self.after(0, lambda: self.title_label.configure(text=title))
+    
+    def complete(self, success: bool = True, message: str = "") -> None:
+        """
+        Mark operation as complete.
+        
+        Args:
+            success: Whether operation succeeded.
+            message: Completion message.
+        """
+        self._completed = True
+        
+        def update():
+            self.progress.set(1.0)
+            
+            if success:
+                self.title_label.configure(text=t("common.operation_complete"))
+                self.progress.configure(progress_color=self.theme.colors["success"])
+                self.log(message or "Operation completed successfully", "success")
+            else:
+                self.title_label.configure(text=t("common.operation_failed"))
+                self.progress.configure(progress_color=self.theme.colors["danger"])
+                self.log(message or "Operation failed", "error")
+            
+            # Show close button, hide cancel
+            self.cancel_btn.pack_forget()
+            self.close_btn.pack(side="right")
+            
+            # Allow closing with X
+            self.protocol("WM_DELETE_WINDOW", self._handle_close)
+        
+        self.after(0, update)
+    
+    def _handle_cancel(self) -> None:
         """Handle cancel button click."""
-        self.cancelled = True
-        self.cancel_button.configure(state="disabled")
-        self.log_message("Operation cancelled by user...")
+        if not self._completed:
+            self._cancelled = True
+            self.log("Operation cancelled by user", "warning")
+    
+    def _handle_close(self) -> None:
+        """Handle close button click."""
+        self.grab_release()
+        self.destroy()
+    
+    @property
+    def cancelled(self) -> bool:
+        """Check if operation was cancelled."""
+        return self._cancelled
+
+
+class ProgressCallback:
+    """Helper class for progress callbacks in threads."""
+    
+    def __init__(self, modal: ProgressModal, total: int = 100) -> None:
+        self.modal = modal
+        self.total = total
+        self.current = 0
+    
+    def update(self, message: str, current: Optional[int] = None) -> bool:
+        """
+        Update progress.
+        
+        Args:
+            message: Progress message.
+            current: Current item number.
+            
+        Returns:
+            False if cancelled, True otherwise.
+        """
+        if current is not None:
+            self.current = current
+        else:
+            self.current += 1
+        
+        progress = self.current / self.total if self.total > 0 else 0
+        self.modal.set_progress(progress, f"{self.current}/{self.total}")
+        self.modal.log(message)
+        
+        return not self.modal.cancelled

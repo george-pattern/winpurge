@@ -1,134 +1,177 @@
 """
-WinPurge GUI Theme Module
-Manages color schemes and visual styling for the application.
+WinPurge Theme Module
+Manages dark/light themes and styling.
 """
 
-from winpurge.constants import DarkTheme, LightTheme, FONT_FAMILY, FONT_SIZE_BODY, BORDER_RADIUS
+import customtkinter as ctk
+from typing import Dict, Any, Optional
 
-
-class Theme:
-    """Simple theme wrapper that provides access to color constants."""
-    
-    def __init__(self, dark_mode: bool = True):
-        """
-        Initialize the theme.
-        
-        Args:
-            dark_mode: True for dark theme, False for light theme.
-        """
-        self.dark_mode = dark_mode
-        self._update_colors()
-    
-    def _update_colors(self):
-        """Update color properties from the selected theme."""
-        theme = DarkTheme if self.dark_mode else LightTheme
-        
-        # Primary colors
-        self.bg_primary = theme.BG_PRIMARY
-        self.bg_secondary = theme.BG_SECONDARY
-        self.bg_tertiary = theme.BG_TERTIARY
-        
-        # Text colors
-        self.text_primary = theme.TEXT_PRIMARY
-        self.text_secondary = theme.TEXT_SECONDARY
-        
-        # Accent colors
-        self.accent = theme.ACCENT_PRIMARY
-        self.accent_hover = theme.ACCENT_HOVER
-        
-        # Status colors
-        # Status colors
-        # constants.py uses STATUS_* names
-        self.success = getattr(theme, 'STATUS_SUCCESS', '#00D26A')
-        self.warning = getattr(theme, 'STATUS_WARNING', '#FFB347')
-        self.danger = getattr(theme, 'STATUS_DANGER', '#FF6B6B')
-        
-        # UI properties
-        self.border_color = theme.BORDER_COLOR
-        self.border_radius = BORDER_RADIUS
-    
-    def toggle_mode(self):
-        """Toggle between dark and light mode."""
-        self.dark_mode = not self.dark_mode
-        self._update_colors()
-    
-    def set_dark_mode(self, dark_mode: bool):
-        """Set dark mode explicitly."""
-        self.dark_mode = dark_mode
-        self._update_colors()
-    
-    def get_font(self, size: int = FONT_SIZE_BODY):
-        """
-        Get font tuple for CustomTkinter.
-        
-        Args:
-            size: Font size in pixels.
-        
-        Returns:
-            tuple: (font_family, size) for use with CTk widgets.
-        """
-        return (FONT_FAMILY, size)
+from winpurge.constants import (
+    DARK_THEME,
+    LIGHT_THEME,
+    RISK_COLORS,
+    FONT_FAMILY,
+    FONT_FALLBACK,
+    FONT_SIZE_BODY,
+    FONT_SIZE_SMALL,
+    FONT_SIZE_HEADER,
+    FONT_SIZE_TITLE,
+    CARD_RADIUS,
+    BUTTON_RADIUS,
+)
 
 
 class ThemeManager:
-    """Manager for application theming."""
+    """Manages application theming."""
     
-    def __init__(self, theme_type: str = "dark"):
+    _instance: Optional["ThemeManager"] = None
+    _current_theme: str = "dark"
+    _colors: Dict[str, str] = DARK_THEME.copy()
+    _callbacks: list = []
+    
+    def __new__(cls) -> "ThemeManager":
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+    
+    def __init__(self) -> None:
+        if not hasattr(self, "_initialized"):
+            self._initialized = True
+            self._setup_customtkinter()
+    
+    def _setup_customtkinter(self) -> None:
+        """Configure CustomTkinter defaults."""
+        ctk.set_appearance_mode("dark")
+        ctk.set_default_color_theme("blue")
+    
+    @property
+    def colors(self) -> Dict[str, str]:
+        """Get current theme colors."""
+        return self._colors
+    
+    @property
+    def current_theme(self) -> str:
+        """Get current theme name."""
+        return self._current_theme
+    
+    def set_theme(self, theme: str) -> None:
         """
-        Initialize the theme manager.
+        Set the application theme.
         
         Args:
-            theme_type: "dark" or "light".
+            theme: Theme name ('dark', 'light', or 'system').
         """
-        self.theme_type = theme_type
-        self.current_theme = DarkTheme if theme_type == "dark" else LightTheme
+        if theme == "system":
+            import darkdetect
+            theme = "dark" if darkdetect.isDark() else "light"
+        
+        self._current_theme = theme
+        self._colors = DARK_THEME.copy() if theme == "dark" else LIGHT_THEME.copy()
+        
+        ctk.set_appearance_mode(theme)
+        
+        # Notify callbacks
+        for callback in self._callbacks:
+            try:
+                callback(theme)
+            except Exception:
+                pass
     
-    def switch_theme(self, theme_type: str) -> None:
+    def register_callback(self, callback) -> None:
+        """Register a callback for theme changes."""
+        if callback not in self._callbacks:
+            self._callbacks.append(callback)
+    
+    def unregister_callback(self, callback) -> None:
+        """Unregister a theme change callback."""
+        if callback in self._callbacks:
+            self._callbacks.remove(callback)
+    
+    def get_font(self, size: str = "body", weight: str = "normal") -> tuple:
         """
-        Switch to a different theme.
+        Get a font tuple for CustomTkinter.
         
         Args:
-            theme_type: "dark" or "light".
-        """
-        self.theme_type = theme_type
-        self.current_theme = DarkTheme if theme_type == "dark" else LightTheme
-    
-    def get_color(self, color_name: str) -> str:
-        """
-        Get a color from the current theme.
-        
-        Args:
-            color_name: Name of the color (e.g., "BG_PRIMARY", "ACCENT_PRIMARY").
-        
+            size: Size name ('small', 'body', 'header', 'title').
+            weight: Font weight ('normal', 'bold').
+            
         Returns:
-            str: Hex color code.
+            Font tuple (family, size, weight).
         """
-        return getattr(self.current_theme, color_name, "#000000")
-    
-    def configure_ctk_appearance(self) -> None:
-        """Configure CustomTkinter appearance based on current theme."""
-        import customtkinter as ctk
+        sizes = {
+            "small": FONT_SIZE_SMALL,
+            "body": FONT_SIZE_BODY,
+            "header": FONT_SIZE_HEADER,
+            "title": FONT_SIZE_TITLE,
+        }
         
-        if self.theme_type == "dark":
-            ctk.set_appearance_mode("dark")
-            ctk.set_default_color_theme("blue")
-        else:
-            ctk.set_appearance_mode("light")
-            ctk.set_default_color_theme("blue")
+        font_size = sizes.get(size, FONT_SIZE_BODY)
+        font_weight = "bold" if weight == "bold" else "normal"
+        
+        return (FONT_FAMILY, font_size, font_weight)
+    
+    def get_risk_colors(self, risk_level: str) -> Dict[str, str]:
+        """
+        Get colors for a risk level.
+        
+        Args:
+            risk_level: Risk level ('safe', 'moderate', 'advanced').
+            
+        Returns:
+            Dictionary with 'bg', 'fg', and 'bg_light' colors.
+        """
+        return RISK_COLORS.get(risk_level, RISK_COLORS["moderate"])
+    
+    def apply_card_style(self, widget: ctk.CTkFrame) -> None:
+        """Apply card styling to a frame widget."""
+        widget.configure(
+            fg_color=self._colors["bg_card"],
+            corner_radius=CARD_RADIUS,
+            border_width=1,
+            border_color=self._colors["card_border"],
+        )
+    
+    def apply_button_style(
+        self,
+        widget: ctk.CTkButton,
+        style: str = "primary",
+    ) -> None:
+        """
+        Apply button styling.
+        
+        Args:
+            widget: Button widget.
+            style: Style type ('primary', 'secondary', 'danger', 'success').
+        """
+        styles = {
+            "primary": {
+                "fg_color": self._colors["accent"],
+                "hover_color": self._colors["accent_hover"],
+                "text_color": "#FFFFFF",
+            },
+            "secondary": {
+                "fg_color": self._colors["bg_card"],
+                "hover_color": self._colors["card_border"],
+                "text_color": self._colors["text_primary"],
+                "border_width": 1,
+                "border_color": self._colors["card_border"],
+            },
+            "danger": {
+                "fg_color": self._colors["danger"],
+                "hover_color": "#FF8080",
+                "text_color": "#FFFFFF",
+            },
+            "success": {
+                "fg_color": self._colors["success"],
+                "hover_color": "#00E676",
+                "text_color": "#FFFFFF",
+            },
+        }
+        
+        style_config = styles.get(style, styles["primary"])
+        widget.configure(corner_radius=BUTTON_RADIUS, **style_config)
 
 
-# Global theme instance
-_theme_manager = None
-
-
-def get_theme_manager() -> ThemeManager:
-    """Get the global theme manager instance."""
-    global _theme_manager
-    if _theme_manager is None:
-        _theme_manager = ThemeManager()
-    return _theme_manager
-
-
-def set_theme(theme_type: str) -> None:
-    """Set the application theme."""
-    get_theme_manager().switch_theme(theme_type)
+def get_theme() -> ThemeManager:
+    """Get the theme manager instance."""
+    return ThemeManager()

@@ -1,158 +1,244 @@
 """
 WinPurge Main Application
-Central application window and entry point.
+Main application window with navigation and page management.
 """
 
 import customtkinter as ctk
-import threading
-from pathlib import Path
-from typing import Optional
+from typing import Dict, Optional
 
-from winpurge.utils import get_logger, is_admin, request_admin, load_locale, setup_logging
-from winpurge.gui.theme import Theme
+from winpurge.constants import (
+    APP_NAME,
+    APP_VERSION,
+    MIN_HEIGHT,
+    MIN_WIDTH,
+    WINDOW_HEIGHT,
+    WINDOW_WIDTH,
+)
+from winpurge.gui.theme import get_theme
 from winpurge.gui.components.sidebar import Sidebar
 from winpurge.gui.components.status_bar import StatusBar
-from winpurge.constants import (
-    APP_NAME, APP_VERSION, WINDOW_WIDTH, WINDOW_MIN_WIDTH,
-    WINDOW_HEIGHT, WINDOW_MIN_HEIGHT
-)
-
-logger = get_logger(__name__)
+from winpurge.gui.pages.home import HomePage
+from winpurge.gui.pages.bloatware import BloatwarePage
+from winpurge.gui.pages.privacy import PrivacyPage
+from winpurge.gui.pages.services import ServicesPage
+from winpurge.gui.pages.gaming import GamingPage
+from winpurge.gui.pages.network import NetworkPage
+from winpurge.gui.pages.cleanup import CleanupPage
+from winpurge.gui.pages.backup import BackupPage
+from winpurge.gui.pages.settings import SettingsPage
+from winpurge.utils import get_relative_time, load_config, t
+from winpurge.backup import backup_manager
 
 
 class WinPurgeApp(ctk.CTk):
     """Main application window."""
     
-    def __init__(self):
-        """Initialize the main application window."""
+    def __init__(self) -> None:
         super().__init__()
         
-        # Setup
-        setup_logging()
+        self.theme = get_theme()
+        self.config = load_config()
         
-        # Check admin privileges
-        if not is_admin():
-            request_admin()
-        
-        # Initialize
-        self.current_page = None
-        self.theme = Theme(dark_mode=True)
-        self.locale = load_locale("en")
+        # Apply saved theme
+        self.theme.set_theme(self.config.get("theme", "dark"))
         
         # Configure window
-        self.title(APP_NAME)
-        self.geometry(f"{WINDOW_WIDTH}x{WINDOW_HEIGHT}")
-        self.minsize(WINDOW_MIN_WIDTH, WINDOW_MIN_HEIGHT)
+        self._configure_window()
         
-        # Configure appearance
-        self.theme.set_dark_mode(True)
-        ctk.set_appearance_mode("dark")
-        ctk.set_default_color_theme("blue")
-        
-        # Create UI
+        # Create layout
         self._create_layout()
         
-        logger.info(f"{APP_NAME} v{APP_VERSION} started")
+        # Initialize pages
+        self.pages: Dict[str, ctk.CTkFrame] = {}
+        self.current_page: Optional[str] = None
+        
+        # Load initial page
+        self._navigate_to("home")
+        
+        # Update status bar
+        self._update_backup_status()
+    
+    def _configure_window(self) -> None:
+        """Configure the main window."""
+        self.title(f"{APP_NAME} v{APP_VERSION}")
+        self.geometry(f"{WINDOW_WIDTH}x{WINDOW_HEIGHT}")
+        self.minsize(MIN_WIDTH, MIN_HEIGHT)
+        
+        # Center window on screen
+        self.update_idletasks()
+        screen_width = self.winfo_screenwidth()
+        screen_height = self.winfo_screenheight()
+        x = (screen_width - WINDOW_WIDTH) // 2
+        y = (screen_height - WINDOW_HEIGHT) // 2
+        self.geometry(f"{WINDOW_WIDTH}x{WINDOW_HEIGHT}+{x}+{y}")
+        
+        # Set window colors
+        self.configure(fg_color=self.theme.colors["bg_main"])
+        
+        # Set window icon (if available)
+        try:
+            from winpurge.utils import get_resource_path
+            icon_path = get_resource_path("assets/icon.ico")
+            if icon_path.exists():
+                self.iconbitmap(str(icon_path))
+        except Exception:
+            pass
+        
+        # Handle window close
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
     
     def _create_layout(self) -> None:
         """Create the main layout."""
         # Main container
-        main_container = ctk.CTkFrame(
-            self,
-            fg_color=self.theme.bg_primary
-        )
-        main_container.pack(fill="both", expand=True)
+        self.main_container = ctk.CTkFrame(self, fg_color="transparent")
+        self.main_container.pack(fill="both", expand=True)
         
-        # Content container with sidebar
-        content_container = ctk.CTkFrame(
-            main_container,
-            fg_color=self.theme.bg_primary
-        )
-        content_container.pack(fill="both", expand=True)
+        # Configure grid
+        self.main_container.columnconfigure(1, weight=1)
+        self.main_container.rowconfigure(0, weight=1)
         
         # Sidebar
         self.sidebar = Sidebar(
-            content_container,
-            on_page_select=self._on_page_select,
-            fg_color=self.theme.bg_secondary,
-            corner_radius=0
+            self.main_container,
+            on_navigate=self._navigate_to,
         )
-        self.sidebar.grid(row=0, column=0, sticky="nsw", padx=0, pady=0)
+        self.sidebar.grid(row=0, column=0, rowspan=2, sticky="nsw")
         
-        # Main content area
+        # Content area
         self.content_frame = ctk.CTkFrame(
-            content_container,
-            fg_color=self.theme.bg_primary,
-            corner_radius=0
+            self.main_container,
+            fg_color="transparent",
         )
-        self.content_frame.grid(row=0, column=1, sticky="nsew", padx=0, pady=0)
-        content_container.grid_rowconfigure(0, weight=1)
-        content_container.grid_columnconfigure(1, weight=1)
+        self.content_frame.grid(row=0, column=1, sticky="nsew")
         
         # Status bar
-        self.status_bar = StatusBar(
-            main_container,
-            fg_color=self.theme.bg_secondary,
-            corner_radius=0
-        )
-        self.status_bar.pack(fill="x", side="bottom")
-        
-        # Show home page by default
-        self._on_page_select("home")
-        self.sidebar.select_page("home")
+        self.status_bar = StatusBar(self.main_container)
+        self.status_bar.grid(row=1, column=1, sticky="sew")
     
-    def _on_page_select(self, page_id: str) -> None:
+    def _navigate_to(self, page_name: str) -> None:
         """
-        Handle page selection.
+        Navigate to a page.
         
         Args:
-            page_id: ID of the selected page.
+            page_name: Name of the page to navigate to.
         """
-        self.current_page = page_id
-        
-        # Clear current content
-        for widget in self.content_frame.winfo_children():
-            widget.destroy()
-        
-        # Create appropriate page
-        if page_id == "home":
-            from winpurge.gui.pages.home import HomePage
-            page = HomePage(self.content_frame)
-        elif page_id == "bloatware":
-            from winpurge.gui.pages.bloatware import BloatwarePage
-            page = BloatwarePage(self.content_frame)
-        elif page_id == "privacy":
-            from winpurge.gui.pages.privacy import PrivacyPage
-            page = PrivacyPage(self.content_frame)
-        elif page_id == "services":
-            from winpurge.gui.pages.services import ServicesPage
-            page = ServicesPage(self.content_frame)
-        elif page_id == "gaming":
-            from winpurge.gui.pages.gaming import GamingPage
-            page = GamingPage(self.content_frame)
-        elif page_id == "network":
-            from winpurge.gui.pages.network import NetworkPage
-            page = NetworkPage(self.content_frame)
-        elif page_id == "cleanup":
-            from winpurge.gui.pages.cleanup import CleanupPage
-            page = CleanupPage(self.content_frame)
-        elif page_id == "backup":
-            from winpurge.gui.pages.backup import BackupPage
-            page = BackupPage(self.content_frame)
-        elif page_id == "settings":
-            from winpurge.gui.pages.settings import SettingsPage
-            page = SettingsPage(self.content_frame)
-        else:
+        # Don't reload if already on this page
+        if page_name == self.current_page:
             return
         
-        page.pack(fill="both", expand=True, padx=0, pady=0)
-
-
-def main():
-    """Main entry point."""
-    app = WinPurgeApp()
-    app.mainloop()
-
-
-if __name__ == "__main__":
-    main()
+        # Hide current page
+        if self.current_page and self.current_page in self.pages:
+            self.pages[self.current_page].pack_forget()
+        
+        # Create page if it doesn't exist
+        if page_name not in self.pages:
+            self.pages[page_name] = self._create_page(page_name)
+        
+        # Show new page
+        self.pages[page_name].pack(fill="both", expand=True)
+        self.current_page = page_name
+        
+        # Update sidebar
+        self.sidebar.set_page(page_name)
+        
+        # Update status bar
+        self.status_bar.set_status(t("status_bar.ready"))
+    
+    def _create_page(self, page_name: str) -> ctk.CTkFrame:
+        """
+        Create a page instance.
+        
+        Args:
+            page_name: Name of the page to create.
+            
+        Returns:
+            Page frame instance.
+        """
+        page_classes = {
+            "home": lambda: HomePage(
+                self.content_frame,
+                on_navigate=self._navigate_to,
+            ),
+            "bloatware": lambda: BloatwarePage(self.content_frame),
+            "privacy": lambda: PrivacyPage(self.content_frame),
+            "services": lambda: ServicesPage(self.content_frame),
+            "gaming": lambda: GamingPage(self.content_frame),
+            "network": lambda: NetworkPage(self.content_frame),
+            "cleanup": lambda: CleanupPage(self.content_frame),
+            "backup": lambda: BackupPage(self.content_frame),
+            "settings": lambda: SettingsPage(
+                self.content_frame,
+                on_language_change=self._on_language_change,
+            ),
+        }
+        
+        if page_name in page_classes:
+            return page_classes[page_name]()
+        
+        # Default fallback page
+        return self._create_placeholder_page(page_name)
+    
+    def _create_placeholder_page(self, page_name: str) -> ctk.CTkFrame:
+        """Create a placeholder page for unimplemented pages."""
+        frame = ctk.CTkFrame(self.content_frame, fg_color="transparent")
+        
+        ctk.CTkLabel(
+            frame,
+            text=f"Page: {page_name}",
+            font=self.theme.get_font("title", "bold"),
+            text_color=self.theme.colors["text_primary"],
+        ).pack(pady=40)
+        
+        ctk.CTkLabel(
+            frame,
+            text="This page is under construction.",
+            font=self.theme.get_font("body"),
+            text_color=self.theme.colors["text_secondary"],
+        ).pack()
+        
+        return frame
+    
+    def _on_language_change(self, language: str) -> None:
+        """
+        Handle language change.
+        
+        Args:
+            language: New language code.
+        """
+        # Refresh sidebar labels
+        self.sidebar.refresh_labels()
+        
+        # Refresh status bar
+        self.status_bar.refresh()
+        
+        # Clear and recreate current page
+        if self.current_page:
+            old_page = self.current_page
+            
+            # Remove old page
+            if old_page in self.pages:
+                self.pages[old_page].destroy()
+                del self.pages[old_page]
+            
+            # Reset current page
+            self.current_page = None
+            
+            # Navigate to recreate page
+            self._navigate_to(old_page)
+    
+    def _update_backup_status(self) -> None:
+        """Update backup status in status bar."""
+        last_backup = backup_manager.get_last_backup_time()
+        
+        if last_backup:
+            self.status_bar.set_backup_status(get_relative_time(last_backup))
+        else:
+            self.status_bar.set_backup_status(t("home.no_backup"))
+    
+    def _on_close(self) -> None:
+        """Handle window close event."""
+        self.destroy()
+    
+    def run(self) -> None:
+        """Run the application main loop."""
+        self.mainloop()

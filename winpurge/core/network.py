@@ -1,243 +1,369 @@
 """
 WinPurge Network Module
-Handles DNS configuration and network optimization.
+Handles network configuration and optimization.
 """
 
-import json
-import logging
-from pathlib import Path
-from typing import List, Optional, Callable, Dict, Any
+import subprocess
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from winpurge.constants import DATA_DIR
-from winpurge.utils import run_command, run_powershell, get_logger
-
-logger = get_logger(__name__)
+from winpurge.constants import DNS_PRESETS, HOSTS_FILE
+from winpurge.utils import logger, run_command, run_powershell
 
 
 class NetworkManager:
-    """Manager for network configuration."""
+    """Manages network configuration and optimizations."""
     
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the network manager."""
-        self.hosts_file = Path("C:\\Windows\\System32\\drivers\\etc\\hosts")
-        self.telemetry_endpoints = self._load_telemetry_endpoints()
+        pass
     
-    def _load_telemetry_endpoints(self) -> List[Dict]:
+    def get_current_dns(self) -> Dict[str, str]:
         """
-        Load telemetry endpoints to block.
+        Get current DNS configuration.
         
         Returns:
-            List of telemetry endpoint dictionaries.
+            Dictionary with interface names and their DNS servers.
         """
-        try:
-            endpoints_file = DATA_DIR / "telemetry_endpoints.json"
-            with open(endpoints_file, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                return data.get("telemetry_endpoints", [])
-        except Exception as e:
-            logger.error(f"Failed to load telemetry endpoints: {e}")
-            return []
-    
-    def apply_dns_preset(self, dns_type: str, progress_callback: Optional[Callable] = None) -> bool:
-        """
-        Apply a DNS preset configuration.
-        
-        Args:
-            dns_type: Type of DNS ("cloudflare", "google", "adguard", "quad9").
-            progress_callback: Optional callback for progress updates.
-        
-        Returns:
-            bool: True if successful.
-        """
-        dns_servers = {
-            "cloudflare": ["1.1.1.1", "1.0.0.1"],
-            "google": ["8.8.8.8", "8.8.4.4"],
-            "adguard": ["94.140.14.14", "94.140.15.15"],
-            "quad9": ["9.9.9.9", "149.112.112.112"]
-        }
-        
-        servers = dns_servers.get(dns_type, [])
-        
-        if not servers:
-            logger.error(f"Unknown DNS type: {dns_type}")
-            return False
+        dns_config = {}
         
         try:
-            if progress_callback:
-                progress_callback(f"Configuring DNS to {dns_type}")
+            success, output = run_powershell(
+                "Get-DnsClientServerAddress -AddressFamily IPv4 | "
+                "Select-Object InterfaceAlias, ServerAddresses | ConvertTo-Json"
+            )
             
-            # Get active network adapter
-            script = f"""
-            $adapter = Get-NetAdapter | Where-Object {{$_.Status -eq 'Up'}} | Select-Object -First 1
-            if ($adapter) {{
-                Set-DnsClientServerAddress -InterfaceIndex $adapter.InterfaceIndex `
-                    -ServerAddresses @('{dns_servers[0]}', '{dns_servers[1]}') `
-                    -ErrorAction SilentlyContinue
-                Write-Output "DNS configured on $($adapter.Name)"
-            }}
-            """
-            
-            code, stdout, stderr = run_powershell(script, capture_output=True)
-            
-            if code == 0:
-                logger.info(f"DNS configured to {dns_type}")
-                return True
-            else:
-                logger.warning(f"Failed to configure DNS: {stderr}")
-                return False
-        
-        except Exception as e:
-            logger.error(f"Failed to apply DNS preset: {e}")
-            return False
-    
-    def block_telemetry_domains(self, progress_callback: Optional[Callable] = None) -> bool:
-        """
-        Add telemetry domains to hosts file.
-        
-        Args:
-            progress_callback: Optional callback for progress updates.
-        
-        Returns:
-            bool: True if successful.
-        """
-        try:
-            if progress_callback:
-                progress_callback("Blocking telemetry domains...")
-            
-            # Read current hosts file
-            try:
-                with open(self.hosts_file, "r", encoding="utf-8") as f:
-                    hosts_content = f.read()
-            except FileNotFoundError:
-                hosts_content = ""
-            
-            # Add telemetry domains
-            new_entries = []
-            for endpoint in self.telemetry_endpoints:
-                domain = endpoint.get("domain", "")
-                if domain and f"127.0.0.1\t{domain}" not in hosts_content:
-                    new_entries.append(f"127.0.0.1\t{domain}")
-            
-            if new_entries:
-                hosts_content += "\n# WinPurge Telemetry Blocking\n"
-                hosts_content += "\n".join(new_entries) + "\n"
+            if success and output:
+                import json
+                interfaces = json.loads(output)
                 
-                # Write updated hosts file
-                with open(self.hosts_file, "w", encoding="utf-8") as f:
-                    f.write(hosts_content)
+                if isinstance(interfaces, dict):
+                    interfaces = [interfaces]
                 
-                logger.info(f"Added {len(new_entries)} telemetry domains to hosts file")
-                return True
-            else:
-                logger.info("All telemetry domains already blocked")
-                return True
-        
-        except Exception as e:
-            logger.error(f"Failed to block telemetry domains: {e}")
-            return False
-    
-    def edit_hosts_file(self, entries: List[dict], action: str = "add") -> bool:
-        """
-        Edit the hosts file by adding or removing entries.
-        
-        Args:
-            entries: List of {ip, hostname} dictionaries.
-            action: "add" or "remove".
-        
-        Returns:
-            bool: True if successful.
-        """
-        try:
-            # Read current hosts
-            try:
-                with open(self.hosts_file, "r", encoding="utf-8") as f:
-                    lines = f.readlines()
-            except FileNotFoundError:
-                lines = []
-            
-            if action == "add":
-                # Add entries
-                for entry in entries:
-                    ip = entry.get("ip", "")
-                    hostname = entry.get("hostname", "")
-                    new_line = f"{ip}\t{hostname}\n"
+                for iface in interfaces:
+                    alias = iface.get("InterfaceAlias", "")
+                    servers = iface.get("ServerAddresses", [])
                     
-                    if new_line not in lines:
-                        lines.append(new_line)
-            
-            elif action == "remove":
-                # Remove entries
-                for entry in entries:
-                    hostname = entry.get("hostname", "")
-                    lines = [l for l in lines if hostname not in l]
-            
-            # Write back
-            with open(self.hosts_file, "w", encoding="utf-8") as f:
-                f.writelines(lines)
-            
-            logger.info(f"Hosts file updated: {action} {len(entries)} entries")
-            return True
-        
+                    if alias and servers:
+                        dns_config[alias] = ", ".join(servers) if isinstance(servers, list) else str(servers)
+                        
         except Exception as e:
-            logger.error(f"Failed to edit hosts file: {e}")
-            return False
+            logger.error(f"Failed to get DNS configuration: {e}")
+        
+        return dns_config
     
-    def get_hosts_file_entries(self) -> List[dict]:
+    def get_network_interfaces(self) -> List[str]:
         """
-        Get current hosts file entries.
+        Get list of active network interfaces.
         
         Returns:
-            List of {ip, hostname} dictionaries.
+            List of interface names.
         """
-        entries = []
+        interfaces = []
         
         try:
-            with open(self.hosts_file, "r", encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if line and not line.startswith("#"):
-                        parts = line.split()
-                        if len(parts) >= 2:
-                            entries.append({
-                                "ip": parts[0],
-                                "hostname": parts[1]
-                            })
+            success, output = run_powershell(
+                "Get-NetAdapter | Where-Object {$_.Status -eq 'Up'} | "
+                "Select-Object -ExpandProperty Name"
+            )
+            
+            if success and output:
+                interfaces = [line.strip() for line in output.split("\n") if line.strip()]
+                
+        except Exception as e:
+            logger.error(f"Failed to get network interfaces: {e}")
+        
+        return interfaces
+    
+    def set_dns(
+        self,
+        interface: str,
+        primary: str,
+        secondary: str = "",
+        progress_callback: Optional[Callable[[str], None]] = None,
+    ) -> Tuple[bool, str]:
+        """
+        Set DNS servers for an interface.
+        
+        Args:
+            interface: Network interface name.
+            primary: Primary DNS server.
+            secondary: Secondary DNS server.
+            progress_callback: Optional callback for progress updates.
+            
+        Returns:
+            Tuple of (success, message).
+        """
+        try:
+            if progress_callback:
+                progress_callback(f"Setting DNS for {interface}...")
+            
+            # Set primary DNS
+            success, output = run_command([
+                "netsh", "interface", "ip", "set", "dns",
+                f"name={interface}", "static", primary
+            ])
+            
+            if not success:
+                return False, f"Failed to set primary DNS: {output}"
+            
+            # Set secondary DNS if provided
+            if secondary:
+                success, output = run_command([
+                    "netsh", "interface", "ip", "add", "dns",
+                    f"name={interface}", secondary, "index=2"
+                ])
+            
+            # Flush DNS cache
+            run_command(["ipconfig", "/flushdns"])
+            
+            logger.info(f"DNS set for {interface}: {primary}, {secondary}")
+            return True, f"DNS configured successfully for {interface}"
+            
+        except Exception as e:
+            logger.error(f"Failed to set DNS: {e}")
+            return False, f"Failed to set DNS: {str(e)}"
+    
+    def set_dns_preset(
+        self,
+        preset_name: str,
+        progress_callback: Optional[Callable[[str], None]] = None,
+    ) -> Tuple[bool, str]:
+        """
+        Apply a DNS preset to all active interfaces.
+        
+        Args:
+            preset_name: Name of the DNS preset.
+            progress_callback: Optional callback for progress updates.
+            
+        Returns:
+            Tuple of (success, message).
+        """
+        preset = DNS_PRESETS.get(preset_name)
+        if not preset:
+            return False, f"Unknown DNS preset: {preset_name}"
+        
+        interfaces = self.get_network_interfaces()
+        if not interfaces:
+            return False, "No active network interfaces found"
+        
+        errors = []
+        
+        for interface in interfaces:
+            success, message = self.set_dns(
+                interface,
+                preset["primary"],
+                preset.get("secondary", ""),
+                progress_callback,
+            )
+            
+            if not success:
+                errors.append(f"{interface}: {message}")
+        
+        if errors:
+            return True, f"DNS set with warnings: {'; '.join(errors)}"
+        
+        return True, f"{preset['name']} DNS configured for all interfaces"
+    
+    def reset_dns(
+        self,
+        progress_callback: Optional[Callable[[str], None]] = None,
+    ) -> Tuple[bool, str]:
+        """
+        Reset DNS to automatic (DHCP).
+        
+        Args:
+            progress_callback: Optional callback for progress updates.
+            
+        Returns:
+            Tuple of (success, message).
+        """
+        try:
+            interfaces = self.get_network_interfaces()
+            
+            for interface in interfaces:
+                if progress_callback:
+                    progress_callback(f"Resetting DNS for {interface}...")
+                
+                run_command([
+                    "netsh", "interface", "ip", "set", "dns",
+                    f"name={interface}", "dhcp"
+                ])
+            
+            run_command(["ipconfig", "/flushdns"])
+            
+            logger.info("DNS reset to DHCP")
+            return True, "DNS reset to automatic for all interfaces"
+            
+        except Exception as e:
+            logger.error(f"Failed to reset DNS: {e}")
+            return False, f"Failed to reset DNS: {str(e)}"
+    
+    def get_hosts_file_content(self) -> str:
+        """
+        Read the current hosts file content.
+        
+        Returns:
+            Hosts file content as string.
+        """
+        try:
+            if HOSTS_FILE.exists():
+                return HOSTS_FILE.read_text(encoding="utf-8", errors="ignore")
         except Exception as e:
             logger.error(f"Failed to read hosts file: {e}")
-        
-        return entries
+        return ""
     
-    def optimize_network_adapter(self, progress_callback: Optional[Callable] = None) -> bool:
+    def get_hosts_entry_count(self) -> int:
         """
-        Optimize network adapter settings.
-        
-        Args:
-            progress_callback: Optional callback for progress updates.
+        Get count of custom entries in hosts file.
         
         Returns:
-            bool: True if successful.
+            Number of non-comment entries.
+        """
+        content = self.get_hosts_file_content()
+        count = 0
+        
+        for line in content.split("\n"):
+            line = line.strip()
+            if line and not line.startswith("#") and not line.startswith("127.0.0.1 localhost"):
+                count += 1
+        
+        return count
+    
+    def add_hosts_entries(
+        self,
+        entries: List[str],
+        progress_callback: Optional[Callable[[str], None]] = None,
+    ) -> Tuple[bool, str]:
+        """
+        Add entries to the hosts file.
+        
+        Args:
+            entries: List of entries (format: "0.0.0.0 domain.com").
+            progress_callback: Optional callback for progress updates.
+            
+        Returns:
+            Tuple of (success, message).
         """
         try:
             if progress_callback:
-                progress_callback("Optimizing network adapter...")
+                progress_callback("Updating hosts file...")
             
-            script = """
-            $adapters = Get-NetAdapter | Where-Object {$_.Status -eq 'Up'}
-            foreach ($adapter in $adapters) {
-                Set-NetAdapterAdvancedProperty -Name $adapter.Name -DisplayName "Large Send Offload Version 2 (IPv4)" -RegistryValue 0 -ErrorAction SilentlyContinue
-                Set-NetAdapterAdvancedProperty -Name $adapter.Name -DisplayName "Receive Side Scaling" -RegistryValue 1 -ErrorAction SilentlyContinue
-            }
-            """
+            current_content = self.get_hosts_file_content()
+            new_entries = []
             
-            code, stdout, stderr = run_powershell(script)
+            for entry in entries:
+                if entry not in current_content:
+                    new_entries.append(entry)
             
-            if code == 0:
-                logger.info("Network adapter optimized")
-                return True
+            if new_entries:
+                new_content = current_content.rstrip() + "\n\n" + "\n".join(new_entries) + "\n"
+                HOSTS_FILE.write_text(new_content, encoding="utf-8")
+                
+                run_command(["ipconfig", "/flushdns"])
+                
+                logger.info(f"Added {len(new_entries)} entries to hosts file")
+                return True, f"Added {len(new_entries)} entries to hosts file"
             else:
-                logger.warning(f"Failed to optimize network adapter: {stderr}")
-                return False
-        
+                return True, "All entries already exist in hosts file"
+                
+        except PermissionError:
+            return False, "Permission denied. Run as administrator."
         except Exception as e:
-            logger.error(f"Failed to optimize network adapter: {e}")
-            return False
+            logger.error(f"Failed to add hosts entries: {e}")
+            return False, f"Failed to add hosts entries: {str(e)}"
+    
+    def save_hosts_file(
+        self,
+        content: str,
+        progress_callback: Optional[Callable[[str], None]] = None,
+    ) -> Tuple[bool, str]:
+        """
+        Save content to the hosts file.
+        
+        Args:
+            content: New hosts file content.
+            progress_callback: Optional callback for progress updates.
+            
+        Returns:
+            Tuple of (success, message).
+        """
+        try:
+            if progress_callback:
+                progress_callback("Saving hosts file...")
+            
+            HOSTS_FILE.write_text(content, encoding="utf-8")
+            run_command(["ipconfig", "/flushdns"])
+            
+            logger.info("Hosts file saved")
+            return True, "Hosts file saved successfully"
+            
+        except PermissionError:
+            return False, "Permission denied. Run as administrator."
+        except Exception as e:
+            logger.error(f"Failed to save hosts file: {e}")
+            return False, f"Failed to save hosts file: {str(e)}"
+    
+    def disable_large_send_offload(
+        self,
+        progress_callback: Optional[Callable[[str], None]] = None,
+    ) -> Tuple[bool, str]:
+        """
+        Disable Large Send Offload for better network performance.
+        
+        Args:
+            progress_callback: Optional callback for progress updates.
+            
+        Returns:
+            Tuple of (success, message).
+        """
+        try:
+            if progress_callback:
+                progress_callback("Disabling Large Send Offload...")
+            
+            success, output = run_powershell(
+                "Get-NetAdapterAdvancedProperty | "
+                "Where-Object {$_.DisplayName -like '*Large Send Offload*'} | "
+                "ForEach-Object { Set-NetAdapterAdvancedProperty -Name $_.Name "
+                "-DisplayName $_.DisplayName -DisplayValue 'Disabled' }"
+            )
+            
+            logger.info("Large Send Offload disabled")
+            return True, "Large Send Offload disabled"
+            
+        except Exception as e:
+            logger.error(f"Failed to disable Large Send Offload: {e}")
+            return False, f"Failed to disable Large Send Offload: {str(e)}"
+    
+    def enable_receive_side_scaling(
+        self,
+        progress_callback: Optional[Callable[[str], None]] = None,
+    ) -> Tuple[bool, str]:
+        """
+        Enable Receive Side Scaling for better network performance.
+        
+        Args:
+            progress_callback: Optional callback for progress updates.
+            
+        Returns:
+            Tuple of (success, message).
+        """
+        try:
+            if progress_callback:
+                progress_callback("Enabling Receive Side Scaling...")
+            
+            success, output = run_powershell(
+                "Get-NetAdapterAdvancedProperty | "
+                "Where-Object {$_.DisplayName -like '*Receive Side Scaling*'} | "
+                "ForEach-Object { Set-NetAdapterAdvancedProperty -Name $_.Name "
+                "-DisplayName $_.DisplayName -DisplayValue 'Enabled' }"
+            )
+            
+            logger.info("Receive Side Scaling enabled")
+            return True, "Receive Side Scaling enabled"
+            
+        except Exception as e:
+            logger.error(f"Failed to enable Receive Side Scaling: {e}")
+            return False, f"Failed to enable Receive Side Scaling: {str(e)}"
+
+
+network_manager = NetworkManager()

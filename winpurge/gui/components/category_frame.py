@@ -1,115 +1,118 @@
 """
-WinPurge GUI Category Frame Component
-Scrollable frame for displaying toggle cards in categories.
+WinPurge Category Frame Component
+Scrollable frame containing toggle cards grouped by category.
 """
 
-from typing import List
 import customtkinter as ctk
+from typing import Any, Callable, Dict, List, Optional
 
-from winpurge.gui.theme import get_theme_manager
+from winpurge.gui.theme import get_theme
 from winpurge.gui.components.toggle_card import ToggleCard
-from winpurge.constants import FONT_SIZE_HEADER
 
 
 class CategoryFrame(ctk.CTkScrollableFrame):
-    """Scrollable frame for displaying categorized toggle cards."""
+    """Scrollable frame with categorized toggle cards."""
     
-    def __init__(self, parent, category_title: str = "", **kwargs):
-        """
-        Initialize the category frame.
-        
-        Args:
-            parent: Parent widget.
-            category_title: Title of the category.
-        """
-        super().__init__(parent, **kwargs)
-        
-        self.category_title = category_title
-        self.theme = get_theme_manager()
-        self.cards: List[ToggleCard] = []
-        
-        # Configure frame
-        self.configure(
-            fg_color=self.theme.get_color("BG_PRIMARY"),
-            scrollbar_button_color=self.theme.get_color("ACCENT_PRIMARY")
-        )
-        
-        # Add category title if provided
-        if category_title:
-            title_label = ctk.CTkLabel(
-                self,
-                text=category_title,
-                font=("Arial", FONT_SIZE_HEADER - 4, " bold"),
-                fg_color="transparent",
-                text_color=self.theme.get_color("TEXT_PRIMARY")
-            )
-            title_label.pack(fill="x", padx=15, pady=(15, 10))
-    
-    def add_toggle_card(
+    def __init__(
         self,
-        title: str,
-        description: str = "",
-        icon: str = "⚙️",
-        risk_level: str = "safe",
-        enabled: bool = False,
-        on_toggle=None
-    ) -> ToggleCard:
-        """
-        Add a toggle card to the category.
+        master: any,
+        items: List[Dict[str, Any]],
+        on_item_toggle: Optional[Callable[[str, bool], None]] = None,
+        show_toggle: bool = True,
+        show_checkbox: bool = False,
+        **kwargs,
+    ) -> None:
+        self.theme = get_theme()
         
-        Args:
-            title: Card title.
-            description: Card description.
-            icon: Icon emoji.
-            risk_level: Risk level.
-            enabled: Initial state.
-            on_toggle: Toggle callback.
-        
-        Returns:
-            The created ToggleCard.
-        """
-        card = ToggleCard(
-            self,
-            title=title,
-            description=description,
-            icon=icon,
-            risk_level=risk_level,
-            on_toggle=on_toggle,
-            enabled=enabled,
-            fg_color=self.theme.get_color("BG_TERTIARY")
+        super().__init__(
+            master,
+            fg_color="transparent",
+            scrollbar_button_color=self.theme.colors["scrollbar"],
+            scrollbar_button_hover_color=self.theme.colors["scrollbar_hover"],
+            **kwargs,
         )
-        card.pack(fill="x", padx=15, pady=8)
-        self.cards.append(card)
         
-        return card
+        self.items = items
+        self.on_item_toggle = on_item_toggle
+        self.show_toggle = show_toggle
+        self.show_checkbox = show_checkbox
+        self.cards: Dict[str, ToggleCard] = {}
+        
+        self._create_cards()
+    
+    def _create_cards(self) -> None:
+        """Create toggle cards for all items."""
+        # Group items by category
+        categories: Dict[str, List[Dict[str, Any]]] = {}
+        
+        for item in self.items:
+            category = item.get("category", "other")
+            if category not in categories:
+                categories[category] = []
+            categories[category].append(item)
+        
+        # Create cards for each category
+        for category, items in categories.items():
+            # Category header
+            header = ctk.CTkLabel(
+                self,
+                text=category.replace("_", " ").title(),
+                font=self.theme.get_font("body", "bold"),
+                text_color=self.theme.colors["text_secondary"],
+                anchor="w",
+            )
+            header.pack(fill="x", padx=4, pady=(16, 8))
+            
+            # Cards
+            for item in items:
+                card = ToggleCard(
+                    self,
+                    title=item.get("display_name", item.get("name", "")),
+                    description=item.get("description", ""),
+                    risk_level=item.get("risk_level", "safe"),
+                    initial_state=item.get("selected", False),
+                    on_toggle=lambda state, i=item: self._handle_toggle(i, state),
+                    icon=item.get("icon", ""),
+                    show_toggle=self.show_toggle,
+                    show_checkbox=self.show_checkbox,
+                )
+                card.pack(fill="x", padx=4, pady=4)
+                
+                item_id = item.get("name", item.get("id", ""))
+                self.cards[item_id] = card
+    
+    def _handle_toggle(self, item: Dict[str, Any], state: bool) -> None:
+        """Handle card toggle."""
+        item_id = item.get("name", item.get("id", ""))
+        
+        if self.on_item_toggle:
+            self.on_item_toggle(item_id, state)
     
     def get_selected_items(self) -> List[str]:
-        """
-        Get all selected card titles.
-        
-        Returns:
-            List of selected card titles.
-        """
-        return [card.title for card in self.cards if card.get_enabled()]
+        """Get list of selected item IDs."""
+        return [item_id for item_id, card in self.cards.items() if card.get()]
     
-    def clear_cards(self) -> None:
-        """Clear all cards from the frame."""
-        for card in self.cards:
-            card.destroy()
-        self.cards.clear()
-
     def select_all(self) -> None:
-        """Select (enable) all toggle cards in this category."""
-        for card in self.cards:
-            try:
-                card.set_enabled(True)
-            except Exception:
-                pass
-
+        """Select all items."""
+        for card in self.cards.values():
+            card.state = True
+    
     def deselect_all(self) -> None:
-        """Deselect (disable) all toggle cards in this category."""
-        for card in self.cards:
-            try:
-                card.set_enabled(False)
-            except Exception:
-                pass
+        """Deselect all items."""
+        for card in self.cards.values():
+            card.state = False
+    
+    def set_item_state(self, item_id: str, state: bool) -> None:
+        """Set state of a specific item."""
+        if item_id in self.cards:
+            self.cards[item_id].state = state
+    
+    def refresh(self, items: List[Dict[str, Any]]) -> None:
+        """Refresh cards with new items."""
+        # Clear existing cards
+        for widget in self.winfo_children():
+            widget.destroy()
+        
+        self.items = items
+        self.cards.clear()
+        self._create_cards()

@@ -1,108 +1,100 @@
 """
-WinPurge GUI Tooltip Component
-Hover tooltip for displaying additional information.
+WinPurge Tooltip Component
+Hover tooltip for widgets.
 """
 
 import customtkinter as ctk
 from typing import Optional
 
-from winpurge.gui.theme import get_theme_manager
-from winpurge.constants import FONT_SIZE_SMALL
+from winpurge.constants import TOOLTIP_DELAY
+from winpurge.gui.theme import get_theme
 
 
 class Tooltip:
-    """Tooltip widget that appears on hover."""
+    """Tooltip that appears on hover."""
     
     def __init__(
         self,
-        widget,
+        widget: ctk.CTkBaseClass,
         text: str,
-        delay: int = 500
-    ):
-        """
-        Initialize a tooltip.
-        
-        Args:
-            widget: Widget to attach tooltip to.
-            text: Tooltip text.
-            delay: Delay before showing in milliseconds.
-        """
+        delay: int = TOOLTIP_DELAY,
+    ) -> None:
         self.widget = widget
         self.text = text
         self.delay = delay
-        self.theme = get_theme_manager()
-        self.tooltip = None
-        self.timer_id = None
+        self.theme = get_theme()
         
-        # Bind events
-        widget.bind("<Enter>", self._on_enter, add="+")
-        widget.bind("<Leave>", self._on_leave, add="+")
-        widget.bind("<Motion>", self._on_motion, add="+")
+        self._tooltip_window: Optional[ctk.CTkToplevel] = None
+        self._after_id: Optional[str] = None
+        
+        self.widget.bind("<Enter>", self._on_enter)
+        self.widget.bind("<Leave>", self._on_leave)
+        self.widget.bind("<Button>", self._on_leave)
     
     def _on_enter(self, event) -> None:
-        """Handle mouse enter event."""
-        if not self.timer_id:
-            self.timer_id = self.widget.after(
-                self.delay,
-                self._show_tooltip,
-                event
-            )
+        """Handle mouse enter."""
+        self._schedule_show()
     
     def _on_leave(self, event) -> None:
-        """Handle mouse leave event."""
-        if self.timer_id:
-            self.widget.after_cancel(self.timer_id)
-            self.timer_id = None
-        self._hide_tooltip()
+        """Handle mouse leave."""
+        self._cancel_show()
+        self._hide()
     
-    def _on_motion(self, event) -> None:
-        """Handle mouse motion event."""
-        if self.tooltip:
-            # Update tooltip position
-            x = event.x_root + 10
-            y = event.y_root + 10
-            self.tooltip.geometry(f"+{x}+{y}")
+    def _schedule_show(self) -> None:
+        """Schedule tooltip display."""
+        self._cancel_show()
+        self._after_id = self.widget.after(self.delay, self._show)
     
-    def _show_tooltip(self, event) -> None:
-        """Show tooltip at mouse position."""
-        if self.tooltip:
+    def _cancel_show(self) -> None:
+        """Cancel scheduled tooltip display."""
+        if self._after_id:
+            self.widget.after_cancel(self._after_id)
+            self._after_id = None
+    
+    def _show(self) -> None:
+        """Display the tooltip."""
+        if self._tooltip_window:
             return
         
+        # Get position
+        x = self.widget.winfo_rootx()
+        y = self.widget.winfo_rooty() + self.widget.winfo_height() + 4
+        
         # Create tooltip window
-        self.tooltip = ctk.CTkToplevel(self.widget)
-        self.tooltip.wm_overrideredirect(True)
-        self.tooltip.attributes("-topmost", True)
+        self._tooltip_window = ctk.CTkToplevel(self.widget)
+        self._tooltip_window.wm_overrideredirect(True)
+        self._tooltip_window.wm_geometry(f"+{x}+{y}")
         
-        # Configure appearance
-        self.tooltip.configure(
-            fg_color=self.theme.get_color("BG_TERTIARY")
+        # Make it stay on top
+        self._tooltip_window.wm_attributes("-topmost", True)
+        
+        # Tooltip frame
+        frame = ctk.CTkFrame(
+            self._tooltip_window,
+            fg_color=self.theme.colors["bg_card"],
+            corner_radius=6,
+            border_width=1,
+            border_color=self.theme.colors["card_border"],
         )
+        frame.pack()
         
-        # Add label
+        # Tooltip text
         label = ctk.CTkLabel(
-            self.tooltip,
+            frame,
             text=self.text,
-            font=("Arial", FONT_SIZE_SMALL),
-            fg_color="transparent",
-            text_color=self.theme.get_color("TEXT_PRIMARY"),
-            wraplength=200,
-            justify="left"
+            font=self.theme.get_font("small"),
+            text_color=self.theme.colors["text_primary"],
+            wraplength=300,
+            justify="left",
         )
-        label.pack(padx=8, pady=6)
-        
-        # Position tooltip
-        x = event.x_root + 10
-        y = event.y_root + 10
-        self.tooltip.geometry(f"+{x}+{y}")
+        label.pack(padx=10, pady=6)
     
-    def _hide_tooltip(self) -> None:
-        """Hide tooltip."""
-        if self.tooltip:
-            self.tooltip.destroy()
-            self.tooltip = None
+    def _hide(self) -> None:
+        """Hide the tooltip."""
+        if self._tooltip_window:
+            self._tooltip_window.destroy()
+            self._tooltip_window = None
     
-    def destroy(self) -> None:
-        """Destroy the tooltip and clean up."""
-        self._hide_tooltip()
-        if self.timer_id:
-            self.widget.after_cancel(self.timer_id)
+    def update_text(self, text: str) -> None:
+        """Update tooltip text."""
+        self.text = text

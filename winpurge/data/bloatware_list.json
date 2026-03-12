@@ -1,81 +1,60 @@
 {
   "packages": [
     {
-      "name": "Microsoft.549981C3F5F10",
-      "display_name": "Cortana",
+      "name": "Microsoft.BingWeather",
+      "display_name": "MSN Weather",
       "category": "microsoft",
       "risk_level": "safe",
-      "description": "Voice assistant application"
-    },
-    {
-      "name": "Clipchamp.Clipchamp",
-      "display_name": "Clipchamp",
-      "category": "microsoft",
-      "risk_level": "safe",
-      "description": "Video editor and creation tool"
+      "description": "Weather application with Bing integration"
     },
     {
       "name": "Microsoft.BingNews",
-      "display_name": "Microsoft News",
+      "display_name": "MSN News",
       "category": "microsoft",
       "risk_level": "safe",
-      "description": "News reader application"
-    },
-    {
-      "name": "Microsoft.BingWeather",
-      "display_name": "Microsoft Weather",
-      "category": "microsoft",
-      "risk_level": "safe",
-      "description": "Weather forecast application"
-    },
-    {
-      "name": "Microsoft.GamingApp",
-      "display_name": "Xbox App",
-      "category": "xbox",
-      "risk_level": "moderate",
-      "description": "Xbox gaming platform"
+      "description": "News application with Bing integration"
     },
     {
       "name": "Microsoft.GetHelp",
       "display_name": "Get Help",
       "category": "microsoft",
       "risk_level": "safe",
-      "description": "Help and support application"
+      "description": "Microsoft support and help application"
     },
     {
       "name": "Microsoft.Getstarted",
       "display_name": "Tips",
       "category": "microsoft",
       "risk_level": "safe",
-      "description": "Windows tips and tricks"
+      "description": "Windows tips and getting started app"
     },
     {
       "name": "Microsoft.MicrosoftOfficeHub",
-      "display_name": "Microsoft Office Hub",
+      "display_name": "Office Hub",
       "category": "microsoft",
-      "risk_level": "moderate",
-      "description": "Office applications hub"
+      "risk_level": "safe",
+      "description": "Office application hub and launcher"
     },
     {
       "name": "Microsoft.MicrosoftSolitaireCollection",
-      "display_name": "Microsoft Solitaire",
+      "display_name": "Solitaire Collection",
       "category": "microsoft",
       "risk_level": "safe",
-      "description": "Solitaire card games"
+      "description": "Microsoft Solitaire games collection"
     },
     {
       "name": "Microsoft.People",
       "display_name": "People",
       "category": "microsoft",
       "risk_level": "safe",
-      "description": "Contacts management"
+      "description": "Contacts and people management app"
     },
     {
-      "name": "Microsoft.PowerAutomate",
+      "name": "Microsoft.PowerAutomateDesktop",
       "display_name": "Power Automate",
       "category": "microsoft",
-      "risk_level": "advanced",
-      "description": "Workflow automation tool"
+      "risk_level": "safe",
+      "description": "Automation and workflow application"
     },
     {
       "name": "Microsoft.Todos",
@@ -89,39 +68,39 @@
       "display_name": "Alarms & Clock",
       "category": "microsoft",
       "risk_level": "safe",
-      "description": "Alarm and clock application"
+      "description": "Alarm, timer, and world clock app"
     },
     {
       "name": "Microsoft.WindowsMaps",
       "display_name": "Maps",
       "category": "microsoft",
       "risk_level": "safe",
-      "description": "Maps and navigation"
+      "description": "Windows Maps application"
     },
     {
       "name": "Microsoft.WindowsSoundRecorder",
       "display_name": "Voice Recorder",
       "category": "microsoft",
       "risk_level": "safe",
-      "description": "Audio recording utility"
+      "description": "Sound recording application"
     },
     {
       "name": "Microsoft.YourPhone",
-      "display_name": "Your Phone",
+      "display_name": "Phone Link",
       "category": "microsoft",
-      "risk_level": "moderate",
-      "description": "Phone integration utility"
+      "risk_level": "safe",
+      "description": "Connect your phone to Windows"
     },
     {
       "name": "Microsoft.ZuneMusic",
-      "display_name": "Zune Music",
+      "display_name": "Groove Music",
       "category": "microsoft",
       "risk_level": "safe",
       "description": "Music player application"
     },
     {
       "name": "Microsoft.ZuneVideo",
-      "display_name": "Zune Video",
+      "display_name": "Movies & TV",
       "category": "microsoft",
       "risk_level": "safe",
       "description": "Video player application"
@@ -130,106 +109,242 @@
       "name": "MicrosoftCorporationII.QuickAssist",
       "display_name": "Quick Assist",
       "category": "microsoft",
-      "risk_level": "moderate",
-      "description": "Remote assistance tool"
+      "risk_level": "safe",
+      "description": "Remote assistance application"
+    },
+    {
+      "name": "Microsoft.549981C3F5F10",
+      "display_name": "Cortana",
+      "category": "microsoft",
+      "risk_level": "safe",
+      "description": "Cortana voice assistant"
     },
     {
       "name": "Microsoft.MicrosoftStickyNotes",
       "display_name": "Sticky Notes",
       "category": "microsoft",
       "risk_level": "safe",
-      "description": "Note-taking application"
+      "description": "Digital sticky notes application"
     },
     {
       "name": "Microsoft.ScreenSketch",
       "display_name": "Snip & Sketch",
       "category": "microsoft",
-      "risk_level": "safe",
+      "risk_level": "moderate",
       "description": "Screenshot and annotation tool"
+    },
+    {
+      "name": "Microsoft.Windows.Ai.Copilot.Provider",
+      "display_name": "Copilot",
+      "category": "microsoft",
+      "risk_level": "safe",
+      "description": "Windows Copilot AI assistant"
     },
     {
       "name": "Microsoft.Copilot",
       "display_name": "Copilot",
       "category": "microsoft",
       "risk_level": "safe",
-      "description": "AI assistant"
+      "description": "Windows Copilot AI assistant"
     },
     {
       "name": "Microsoft.OutlookForWindows",
-      "display_name": "Outlook for Windows",
+      "display_name": "Outlook (New)",
       "category": "microsoft",
-      "risk_level": "moderate",
-      "description": "Email and calendar client"
+      "risk_level": "safe",
+      "description": "New Outlook email client"
     },
     {
-      "name": "Microsoft.Xbox*",
-      "display_name": "Xbox Applications",
+      "name": "Clipchamp.Clipchamp",
+      "display_name": "Clipchamp",
+      "category": "microsoft",
+      "risk_level": "safe",
+      "description": "Video editing application"
+    },
+    {
+      "name": "Microsoft.GamingApp",
+      "display_name": "Xbox App",
       "category": "xbox",
       "risk_level": "moderate",
-      "description": "Xbox gaming related apps"
+      "description": "Xbox gaming application"
     },
     {
-      "name": "Disney.DisneyPlus",
-      "display_name": "Disney+",
-      "category": "third_party",
-      "risk_level": "safe",
-      "description": "Disney streaming service"
+      "name": "Microsoft.Xbox.TCUI",
+      "display_name": "Xbox TCUI",
+      "category": "xbox",
+      "risk_level": "moderate",
+      "description": "Xbox text and chat UI"
     },
     {
-      "name": "Spotify.Spotify",
+      "name": "Microsoft.XboxGameOverlay",
+      "display_name": "Xbox Game Overlay",
+      "category": "xbox",
+      "risk_level": "moderate",
+      "description": "Xbox game overlay component"
+    },
+    {
+      "name": "Microsoft.XboxGamingOverlay",
+      "display_name": "Xbox Game Bar",
+      "category": "xbox",
+      "risk_level": "moderate",
+      "description": "Xbox Game Bar overlay"
+    },
+    {
+      "name": "Microsoft.XboxIdentityProvider",
+      "display_name": "Xbox Identity Provider",
+      "category": "xbox",
+      "risk_level": "moderate",
+      "description": "Xbox account identity provider"
+    },
+    {
+      "name": "Microsoft.XboxSpeechToTextOverlay",
+      "display_name": "Xbox Speech to Text",
+      "category": "xbox",
+      "risk_level": "moderate",
+      "description": "Xbox speech to text overlay"
+    },
+    {
+      "name": "SpotifyAB.SpotifyMusic",
       "display_name": "Spotify",
-      "category": "third_party",
+      "category": "thirdparty",
       "risk_level": "safe",
-      "description": "Music streaming service"
+      "description": "Spotify music streaming"
     },
     {
-      "name": "TikTok.TikTok",
+      "name": "Disney.37853FC22B2CE",
+      "display_name": "Disney+",
+      "category": "thirdparty",
+      "risk_level": "safe",
+      "description": "Disney+ streaming service"
+    },
+    {
+      "name": "BytedancePte.Ltd.TikTok",
       "display_name": "TikTok",
-      "category": "third_party",
+      "category": "thirdparty",
       "risk_level": "safe",
-      "description": "Social media application"
+      "description": "TikTok social media app"
     },
     {
-      "name": "Meta.Instagram",
-      "display_name": "Instagram",
-      "category": "third_party",
-      "risk_level": "safe",
-      "description": "Social media application"
-    },
-    {
-      "name": "Meta.Facebook",
+      "name": "Facebook.Facebook",
       "display_name": "Facebook",
-      "category": "third_party",
+      "category": "thirdparty",
       "risk_level": "safe",
-      "description": "Social media application"
+      "description": "Facebook social media app"
     },
     {
-      "name": "Netflix.Netflix",
+      "name": "Facebook.Instagram",
+      "display_name": "Instagram",
+      "category": "thirdparty",
+      "risk_level": "safe",
+      "description": "Instagram social media app"
+    },
+    {
+      "name": "4DF9E0F8.Netflix",
       "display_name": "Netflix",
-      "category": "third_party",
+      "category": "thirdparty",
       "risk_level": "safe",
-      "description": "Video streaming service"
+      "description": "Netflix streaming service"
     },
     {
-      "name": "LinkedInCorporation.LinkedIn",
-      "display_name": "LinkedIn",
-      "category": "third_party",
+      "name": "AmazonVideo.PrimeVideo",
+      "display_name": "Prime Video",
+      "category": "thirdparty",
       "risk_level": "safe",
-      "description": "Professional network"
+      "description": "Amazon Prime Video"
     },
     {
-      "name": "AmazonSecure.Amazon",
-      "display_name": "Amazon",
-      "category": "third_party",
+      "name": "5A894077.McAfeeSecurity",
+      "display_name": "McAfee Security",
+      "category": "thirdparty",
       "risk_level": "safe",
-      "description": "Shopping application"
+      "description": "McAfee antivirus software"
     },
     {
-      "name": "AdobeInc.AdobeExpress",
+      "name": "AdobeSystemsIncorporated.AdobeCreativeCloudExpress",
       "display_name": "Adobe Express",
-      "category": "third_party",
+      "category": "thirdparty",
       "risk_level": "safe",
-      "description": "Design and creation tool"
+      "description": "Adobe Creative Cloud Express"
+    },
+    {
+      "name": "7EE7776C.LinkedInforWindows",
+      "display_name": "LinkedIn",
+      "category": "thirdparty",
+      "risk_level": "safe",
+      "description": "LinkedIn professional network"
+    },
+    {
+      "name": "FACEBOOK.FACEBOOK",
+      "display_name": "Facebook",
+      "category": "thirdparty",
+      "risk_level": "safe",
+      "description": "Facebook social media app"
     }
-  ]
+  ],
+  "wildcards": [
+    {
+      "pattern": "*HP*",
+      "category": "oem",
+      "risk_level": "safe",
+      "description": "HP OEM software"
+    },
+    {
+      "pattern": "*Dell*",
+      "category": "oem",
+      "risk_level": "safe",
+      "description": "Dell OEM software"
+    },
+    {
+      "pattern": "*Lenovo*",
+      "category": "oem",
+      "risk_level": "safe",
+      "description": "Lenovo OEM software"
+    },
+    {
+      "pattern": "*Asus*",
+      "category": "oem",
+      "risk_level": "safe",
+      "description": "ASUS OEM software"
+    },
+    {
+      "pattern": "*Acer*",
+      "category": "oem",
+      "risk_level": "safe",
+      "description": "Acer OEM software"
+    },
+    {
+      "pattern": "*CyberLink*",
+      "category": "oem",
+      "risk_level": "safe",
+      "description": "CyberLink software"
+    },
+    {
+      "pattern": "*Dolby*",
+      "category": "oem",
+      "risk_level": "moderate",
+      "description": "Dolby audio software"
+    }
+  ],
+  "categories": {
+    "microsoft": {
+      "display_name": "Microsoft Apps",
+      "icon": "microsoft"
+    },
+    "thirdparty": {
+      "display_name": "Third-Party Apps",
+      "icon": "package"
+    },
+    "xbox": {
+      "display_name": "Xbox & Gaming",
+      "icon": "gamepad"
+    },
+    "oem": {
+      "display_name": "OEM Bloatware",
+      "icon": "building"
+    },
+    "onedrive": {
+      "display_name": "OneDrive",
+      "icon": "cloud"
+    }
+  }
 }

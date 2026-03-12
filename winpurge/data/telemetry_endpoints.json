@@ -1,84 +1,303 @@
 {
-  "telemetry_endpoints": [
+  "endpoints": [
     {
       "domain": "vortex.data.microsoft.com",
-      "description": "Telemetry collection endpoint"
+      "category": "telemetry",
+      "description": "Microsoft telemetry data collection"
     },
     {
-      "domain": "settings-win.data.microsoft.com",
-      "description": "Settings and telemetry"
+      "domain": "vortex-win.data.microsoft.com",
+      "category": "telemetry",
+      "description": "Microsoft Windows telemetry"
+    },
+    {
+      "domain": "telecommand.telemetry.microsoft.com",
+      "category": "telemetry",
+      "description": "Microsoft telemetry commands"
+    },
+    {
+      "domain": "telecommand.telemetry.microsoft.com.nsatc.net",
+      "category": "telemetry",
+      "description": "Microsoft telemetry commands"
+    },
+    {
+      "domain": "oca.telemetry.microsoft.com",
+      "category": "telemetry",
+      "description": "Microsoft Online Crash Analysis"
+    },
+    {
+      "domain": "oca.telemetry.microsoft.com.nsatc.net",
+      "category": "telemetry",
+      "description": "Microsoft Online Crash Analysis"
+    },
+    {
+      "domain": "sqm.telemetry.microsoft.com",
+      "category": "telemetry",
+      "description": "Microsoft Software Quality Metrics"
+    },
+    {
+      "domain": "sqm.telemetry.microsoft.com.nsatc.net",
+      "category": "telemetry",
+      "description": "Microsoft Software Quality Metrics"
     },
     {
       "domain": "watson.telemetry.microsoft.com",
-      "description": "Watson error reporting"
+      "category": "telemetry",
+      "description": "Microsoft Watson error reporting"
     },
     {
-      "domain": "telemetry.microsoft.com",
-      "description": "General telemetry"
+      "domain": "watson.telemetry.microsoft.com.nsatc.net",
+      "category": "telemetry",
+      "description": "Microsoft Watson error reporting"
     },
     {
-      "domain": "telemetry.appex.bing.net",
-      "description": "Bing telemetry"
-    },
-    {
-      "domain": "c.bing.com",
-      "description": "Bing tracking"
-    },
-    {
-      "domain": "data.microsoft.com",
-      "description": "Microsoft data collection"
-    },
-    {
-      "domain": "appex.bing.com",
-      "description": "Application experience tracking"
-    },
-    {
-      "domain": "api.search.live.com",
-      "description": "Bing search API"
-    },
-    {
-      "domain": "bingads.microsoft.com",
-      "description": "Bing Ads"
-    },
-    {
-      "domain": "ui.skype.com",
-      "description": "Skype user interface tracking"
-    },
-    {
-      "domain": "settings.data.microsoft.com",
-      "description": "Settings synchronization"
-    },
-    {
-      "domain": "urs.microsoft.com",
-      "description": "User registration service"
+      "domain": "redir.metaservices.microsoft.com",
+      "category": "telemetry",
+      "description": "Microsoft metaservices"
     },
     {
       "domain": "choice.microsoft.com",
-      "description": "Choice notification service"
+      "category": "telemetry",
+      "description": "Microsoft choice services"
     },
     {
-      "domain": "omniroot.com",
-      "description": "Microsoft tracking"
+      "domain": "choice.microsoft.com.nsatc.net",
+      "category": "telemetry",
+      "description": "Microsoft choice services"
+    },
+    {
+      "domain": "df.telemetry.microsoft.com",
+      "category": "telemetry",
+      "description": "Microsoft diagnostics"
+    },
+    {
+      "domain": "reports.wes.df.telemetry.microsoft.com",
+      "category": "telemetry",
+      "description": "Microsoft diagnostic reports"
+    },
+    {
+      "domain": "wes.df.telemetry.microsoft.com",
+      "category": "telemetry",
+      "description": "Microsoft WES telemetry"
+    },
+    {
+      "domain": "services.wes.df.telemetry.microsoft.com",
+      "category": "telemetry",
+      "description": "Microsoft WES services"
+    },
+    {
+      "domain": "sqm.df.telemetry.microsoft.com",
+      "category": "telemetry",
+      "description": "Microsoft SQM diagnostics"
+    },
+    {
+      "domain": "telemetry.microsoft.com",
+      "category": "telemetry",
+      "description": "Microsoft telemetry"
+    },
+    {
+      "domain": "watson.ppe.telemetry.microsoft.com",
+      "category": "telemetry",
+      "description": "Microsoft Watson PPE"
+    },
+    {
+      "domain": "telemetry.appex.bing.net",
+      "category": "telemetry",
+      "description": "Bing telemetry"
+    },
+    {
+      "domain": "telemetry.urs.microsoft.com",
+      "category": "telemetry",
+      "description": "Microsoft URS telemetry"
+    },
+    {
+      "domain": "telemetry.appex.bing.net:443",
+      "category": "telemetry",
+      "description": "Bing telemetry (HTTPS)"
+    },
+    {
+      "domain": "settings-sandbox.data.microsoft.com",
+      "category": "telemetry",
+      "description": "Microsoft settings sandbox"
+    },
+    {
+      "domain": "vortex-sandbox.data.microsoft.com",
+      "category": "telemetry",
+      "description": "Microsoft vortex sandbox"
+    },
+    {
+      "domain": "survey.watson.microsoft.com",
+      "category": "telemetry",
+      "description": "Microsoft Watson surveys"
+    },
+    {
+      "domain": "watson.live.com",
+      "category": "telemetry",
+      "description": "Microsoft Watson Live"
+    },
+    {
+      "domain": "watson.microsoft.com",
+      "category": "telemetry",
+      "description": "Microsoft Watson"
+    },
+    {
+      "domain": "statsfe2.ws.microsoft.com",
+      "category": "telemetry",
+      "description": "Microsoft statistics"
+    },
+    {
+      "domain": "corpext.msitadfs.glbdns2.microsoft.com",
+      "category": "telemetry",
+      "description": "Microsoft corporate telemetry"
+    },
+    {
+      "domain": "compatexchange.cloudapp.net",
+      "category": "telemetry",
+      "description": "Microsoft compatibility data"
+    },
+    {
+      "domain": "cs1.wpc.v0cdn.net",
+      "category": "tracking",
+      "description": "Content delivery tracking"
+    },
+    {
+      "domain": "a-0001.a-msedge.net",
+      "category": "tracking",
+      "description": "Microsoft Edge tracking"
+    },
+    {
+      "domain": "statsfe2.update.microsoft.com.akadns.net",
+      "category": "telemetry",
+      "description": "Microsoft update statistics"
+    },
+    {
+      "domain": "sls.update.microsoft.com.akadns.net",
+      "category": "telemetry",
+      "description": "Microsoft update services"
+    },
+    {
+      "domain": "fe2.update.microsoft.com.akadns.net",
+      "category": "telemetry",
+      "description": "Microsoft update frontend"
+    },
+    {
+      "domain": "diagnostics.support.microsoft.com",
+      "category": "telemetry",
+      "description": "Microsoft support diagnostics"
+    },
+    {
+      "domain": "corp.sts.microsoft.com",
+      "category": "telemetry",
+      "description": "Microsoft corporate STS"
+    },
+    {
+      "domain": "statsfe1.ws.microsoft.com",
+      "category": "telemetry",
+      "description": "Microsoft statistics"
+    },
+    {
+      "domain": "pre.footprintpredict.com",
+      "category": "tracking",
+      "description": "Prediction tracking"
+    },
+    {
+      "domain": "i1.services.social.microsoft.com",
+      "category": "tracking",
+      "description": "Microsoft social services"
+    },
+    {
+      "domain": "i1.services.social.microsoft.com.nsatc.net",
+      "category": "tracking",
+      "description": "Microsoft social services"
+    },
+    {
+      "domain": "feedback.windows.com",
+      "category": "telemetry",
+      "description": "Windows feedback"
+    },
+    {
+      "domain": "feedback.microsoft-hohm.com",
+      "category": "telemetry",
+      "description": "Microsoft feedback"
+    },
+    {
+      "domain": "feedback.search.microsoft.com",
+      "category": "telemetry",
+      "description": "Microsoft search feedback"
     },
     {
       "domain": "rad.msn.com",
-      "description": "Microsoft advertising"
+      "category": "advertising",
+      "description": "MSN advertising"
+    },
+    {
+      "domain": "preview.msn.com",
+      "category": "advertising",
+      "description": "MSN preview ads"
+    },
+    {
+      "domain": "ad.doubleclick.net",
+      "category": "advertising",
+      "description": "DoubleClick advertising"
     },
     {
       "domain": "ads.msn.com",
-      "description": "Microsoft ads"
+      "category": "advertising",
+      "description": "MSN advertising"
     },
     {
-      "domain": "msnbot.live.com",
-      "description": "MSN bot"
+      "domain": "ads1.msads.net",
+      "category": "advertising",
+      "description": "Microsoft advertising"
     },
     {
-      "domain": "htconiphone.hlstiphone.com",
-      "description": "Phone service tracking"
+      "domain": "ads1.msn.com",
+      "category": "advertising",
+      "description": "MSN advertising"
     },
     {
-      "domain": "mobile.pipe.aria.microsoft.com",
-      "description": "Mobile specific telemetry"
+      "domain": "a.ads1.msn.com",
+      "category": "advertising",
+      "description": "MSN advertising"
+    },
+    {
+      "domain": "a.ads2.msn.com",
+      "category": "advertising",
+      "description": "MSN advertising"
+    },
+    {
+      "domain": "adnexus.net",
+      "category": "advertising",
+      "description": "Ad network"
+    },
+    {
+      "domain": "adnxs.com",
+      "category": "advertising",
+      "description": "Ad network"
+    },
+    {
+      "domain": "az361816.vo.msecnd.net",
+      "category": "advertising",
+      "description": "Microsoft advertising CDN"
+    },
+    {
+      "domain": "az512334.vo.msecnd.net",
+      "category": "advertising",
+      "description": "Microsoft advertising CDN"
     }
-  ]
+  ],
+  "categories": {
+    "telemetry": {
+      "display_name": "Telemetry",
+      "description": "Data collection and diagnostics"
+    },
+    "tracking": {
+      "display_name": "Tracking",
+      "description": "User activity tracking"
+    },
+    "advertising": {
+      "display_name": "Advertising",
+      "description": "Advertising and marketing"
+    }
+  }
 }
