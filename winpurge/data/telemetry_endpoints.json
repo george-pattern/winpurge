@@ -1,0 +1,84 @@
+{
+  "telemetry_endpoints": [
+    {
+      "domain": "vortex.data.microsoft.com",
+      "description": "Telemetry collection endpoint"
+    },
+    {
+      "domain": "settings-win.data.microsoft.com",
+      "description": "Settings and telemetry"
+    },
+    {
+      "domain": "watson.telemetry.microsoft.com",
+      "description": "Watson error reporting"
+    },
+    {
+      "domain": "telemetry.microsoft.com",
+      "description": "General telemetry"
+    },
+    {
+      "domain": "telemetry.appex.bing.net",
+      "description": "Bing telemetry"
+    },
+    {
+      "domain": "c.bing.com",
+      "description": "Bing tracking"
+    },
+    {
+      "domain": "data.microsoft.com",
+      "description": "Microsoft data collection"
+    },
+    {
+      "domain": "appex.bing.com",
+      "description": "Application experience tracking"
+    },
+    {
+      "domain": "api.search.live.com",
+      "description": "Bing search API"
+    },
+    {
+      "domain": "bingads.microsoft.com",
+      "description": "Bing Ads"
+    },
+    {
+      "domain": "ui.skype.com",
+      "description": "Skype user interface tracking"
+    },
+    {
+      "domain": "settings.data.microsoft.com",
+      "description": "Settings synchronization"
+    },
+    {
+      "domain": "urs.microsoft.com",
+      "description": "User registration service"
+    },
+    {
+      "domain": "choice.microsoft.com",
+      "description": "Choice notification service"
+    },
+    {
+      "domain": "omniroot.com",
+      "description": "Microsoft tracking"
+    },
+    {
+      "domain": "rad.msn.com",
+      "description": "Microsoft advertising"
+    },
+    {
+      "domain": "ads.msn.com",
+      "description": "Microsoft ads"
+    },
+    {
+      "domain": "msnbot.live.com",
+      "description": "MSN bot"
+    },
+    {
+      "domain": "htconiphone.hlstiphone.com",
+      "description": "Phone service tracking"
+    },
+    {
+      "domain": "mobile.pipe.aria.microsoft.com",
+      "description": "Mobile specific telemetry"
+    }
+  ]
+}

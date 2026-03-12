@@ -1,0 +1,235 @@
+{
+  "packages": [
+    {
+      "name": "Microsoft.549981C3F5F10",
+      "display_name": "Cortana",
+      "category": "microsoft",
+      "risk_level": "safe",
+      "description": "Voice assistant application"
+    },
+    {
+      "name": "Clipchamp.Clipchamp",
+      "display_name": "Clipchamp",
+      "category": "microsoft",
+      "risk_level": "safe",
+      "description": "Video editor and creation tool"
+    },
+    {
+      "name": "Microsoft.BingNews",
+      "display_name": "Microsoft News",
+      "category": "microsoft",
+      "risk_level": "safe",
+      "description": "News reader application"
+    },
+    {
+      "name": "Microsoft.BingWeather",
+      "display_name": "Microsoft Weather",
+      "category": "microsoft",
+      "risk_level": "safe",
+      "description": "Weather forecast application"
+    },
+    {
+      "name": "Microsoft.GamingApp",
+      "display_name": "Xbox App",
+      "category": "xbox",
+      "risk_level": "moderate",
+      "description": "Xbox gaming platform"
+    },
+    {
+      "name": "Microsoft.GetHelp",
+      "display_name": "Get Help",
+      "category": "microsoft",
+      "risk_level": "safe",
+      "description": "Help and support application"
+    },
+    {
+      "name": "Microsoft.Getstarted",
+      "display_name": "Tips",
+      "category": "microsoft",
+      "risk_level": "safe",
+      "description": "Windows tips and tricks"
+    },
+    {
+      "name": "Microsoft.MicrosoftOfficeHub",
+      "display_name": "Microsoft Office Hub",
+      "category": "microsoft",
+      "risk_level": "moderate",
+      "description": "Office applications hub"
+    },
+    {
+      "name": "Microsoft.MicrosoftSolitaireCollection",
+      "display_name": "Microsoft Solitaire",
+      "category": "microsoft",
+      "risk_level": "safe",
+      "description": "Solitaire card games"
+    },
+    {
+      "name": "Microsoft.People",
+      "display_name": "People",
+      "category": "microsoft",
+      "risk_level": "safe",
+      "description": "Contacts management"
+    },
+    {
+      "name": "Microsoft.PowerAutomate",
+      "display_name": "Power Automate",
+      "category": "microsoft",
+      "risk_level": "advanced",
+      "description": "Workflow automation tool"
+    },
+    {
+      "name": "Microsoft.Todos",
+      "display_name": "Microsoft To Do",
+      "category": "microsoft",
+      "risk_level": "safe",
+      "description": "Task management application"
+    },
+    {
+      "name": "Microsoft.WindowsAlarms",
+      "display_name": "Alarms & Clock",
+      "category": "microsoft",
+      "risk_level": "safe",
+      "description": "Alarm and clock application"
+    },
+    {
+      "name": "Microsoft.WindowsMaps",
+      "display_name": "Maps",
+      "category": "microsoft",
+      "risk_level": "safe",
+      "description": "Maps and navigation"
+    },
+    {
+      "name": "Microsoft.WindowsSoundRecorder",
+      "display_name": "Voice Recorder",
+      "category": "microsoft",
+      "risk_level": "safe",
+      "description": "Audio recording utility"
+    },
+    {
+      "name": "Microsoft.YourPhone",
+      "display_name": "Your Phone",
+      "category": "microsoft",
+      "risk_level": "moderate",
+      "description": "Phone integration utility"
+    },
+    {
+      "name": "Microsoft.ZuneMusic",
+      "display_name": "Zune Music",
+      "category": "microsoft",
+      "risk_level": "safe",
+      "description": "Music player application"
+    },
+    {
+      "name": "Microsoft.ZuneVideo",
+      "display_name": "Zune Video",
+      "category": "microsoft",
+      "risk_level": "safe",
+      "description": "Video player application"
+    },
+    {
+      "name": "MicrosoftCorporationII.QuickAssist",
+      "display_name": "Quick Assist",
+      "category": "microsoft",
+      "risk_level": "moderate",
+      "description": "Remote assistance tool"
+    },
+    {
+      "name": "Microsoft.MicrosoftStickyNotes",
+      "display_name": "Sticky Notes",
+      "category": "microsoft",
+      "risk_level": "safe",
+      "description": "Note-taking application"
+    },
+    {
+      "name": "Microsoft.ScreenSketch",
+      "display_name": "Snip & Sketch",
+      "category": "microsoft",
+      "risk_level": "safe",
+      "description": "Screenshot and annotation tool"
+    },
+    {
+      "name": "Microsoft.Copilot",
+      "display_name": "Copilot",
+      "category": "microsoft",
+      "risk_level": "safe",
+      "description": "AI assistant"
+    },
+    {
+      "name": "Microsoft.OutlookForWindows",
+      "display_name": "Outlook for Windows",
+      "category": "microsoft",
+      "risk_level": "moderate",
+      "description": "Email and calendar client"
+    },
+    {
+      "name": "Microsoft.Xbox*",
+      "display_name": "Xbox Applications",
+      "category": "xbox",
+      "risk_level": "moderate",
+      "description": "Xbox gaming related apps"
+    },
+    {
+      "name": "Disney.DisneyPlus",
+      "display_name": "Disney+",
+      "category": "third_party",
+      "risk_level": "safe",
+      "description": "Disney streaming service"
+    },
+    {
+      "name": "Spotify.Spotify",
+      "display_name": "Spotify",
+      "category": "third_party",
+      "risk_level": "safe",
+      "description": "Music streaming service"
+    },
+    {
+      "name": "TikTok.TikTok",
+      "display_name": "TikTok",
+      "category": "third_party",
+      "risk_level": "safe",
+      "description": "Social media application"
+    },
+    {
+      "name": "Meta.Instagram",
+      "display_name": "Instagram",
+      "category": "third_party",
+      "risk_level": "safe",
+      "description": "Social media application"
+    },
+    {
+      "name": "Meta.Facebook",
+      "display_name": "Facebook",
+      "category": "third_party",
+      "risk_level": "safe",
+      "description": "Social media application"
+    },
+    {
+      "name": "Netflix.Netflix",
+      "display_name": "Netflix",
+      "category": "third_party",
+      "risk_level": "safe",
+      "description": "Video streaming service"
+    },
+    {
+      "name": "LinkedInCorporation.LinkedIn",
+      "display_name": "LinkedIn",
+      "category": "third_party",
+      "risk_level": "safe",
+      "description": "Professional network"
+    },
+    {
+      "name": "AmazonSecure.Amazon",
+      "display_name": "Amazon",
+      "category": "third_party",
+      "risk_level": "safe",
+      "description": "Shopping application"
+    },
+    {
+      "name": "AdobeInc.AdobeExpress",
+      "display_name": "Adobe Express",
+      "category": "third_party",
+      "risk_level": "safe",
+      "description": "Design and creation tool"
+    }
+  ]
+}

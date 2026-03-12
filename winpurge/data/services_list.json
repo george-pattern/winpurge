@@ -1,0 +1,130 @@
+{
+  "services": [
+    {
+      "service_name": "DiagTrack",
+      "display_name": "DiagTrack",
+      "description": "Diagnostic tracking service for telemetry",
+      "risk_level": "safe",
+      "default_state": "running"
+    },
+    {
+      "service_name": "dmwappushservice",
+      "display_name": "dmwappushservice",
+      "description": "Device Management Push notification service",
+      "risk_level": "safe",
+      "default_state": "running"
+    },
+    {
+      "service_name": "RetailDemo",
+      "display_name": "RetailDemo",
+      "description": "Retail demo content service",
+      "risk_level": "safe",
+      "default_state": "stopped"
+    },
+    {
+      "service_name": "MapsBroker",
+      "display_name": "MapsBroker",
+      "description": "Maps broker service",
+      "risk_level": "moderate",
+      "default_state": "running"
+    },
+    {
+      "service_name": "WMPNetworkSvc",
+      "display_name": "WMP Network Sharing Service",
+      "description": "Windows Media Player network sharing",
+      "risk_level": "safe",
+      "default_state": "stopped"
+    },
+    {
+      "service_name": "WSearch",
+      "display_name": "Windows Search",
+      "description": "File and content indexing service",
+      "risk_level": "moderate",
+      "default_state": "running"
+    },
+    {
+      "service_name": "Fax",
+      "display_name": "Fax Service",
+      "description": "Fax service for receiving faxes",
+      "risk_level": "safe",
+      "default_state": "stopped"
+    },
+    {
+      "service_name": "RemoteRegistry",
+      "display_name": "Remote Registry",
+      "description": "Allows remote registry editing",
+      "risk_level": "safe",
+      "default_state": "stopped"
+    },
+    {
+      "service_name": "SysMain",
+      "display_name": "Superfetch (SysMain)",
+      "description": "Memory optimization service",
+      "risk_level": "moderate",
+      "default_state": "running"
+    },
+    {
+      "service_name": "TabletInputService",
+      "display_name": "Tablet Input Service",
+      "description": "Touch input support service",
+      "risk_level": "moderate",
+      "default_state": "running"
+    },
+    {
+      "service_name": "WbioSrvc",
+      "display_name": "Windows Biometric Service",
+      "description": "Biometric authentication support",
+      "risk_level": "moderate",
+      "default_state": "running"
+    },
+    {
+      "service_name": "lfsvc",
+      "display_name": "Geolocation Service",
+      "description": "Location services for applications",
+      "risk_level": "moderate",
+      "default_state": "stopped"
+    },
+    {
+      "service_name": "PhoneSvc",
+      "display_name": "Phone Service",
+      "description": "Phone service integration",
+      "risk_level": "moderate",
+      "default_state": "stopped"
+    },
+    {
+      "service_name": "CDPUserSvc",
+      "display_name": "Connected User Experiences",
+      "description": "Connected experiences and cloud data",
+      "risk_level": "moderate",
+      "default_state": "running"
+    },
+    {
+      "service_name": "WerSvc",
+      "display_name": "Windows Error Reporting",
+      "description": "Reports Windows errors to Microsoft",
+      "risk_level": "moderate",
+      "default_state": "running"
+    },
+    {
+      "service_name": "wisvc",
+      "display_name": "Windows Insider Service",
+      "description": "Windows Insider Program service",
+      "risk_level": "moderate",
+      "default_state": "stopped"
+    },
+    {
+      "service_name": "XboxGipSvc",
+      "display_name": "Xbox Accessory Management Service",
+      "description": "Xbox controller management",
+      "risk_level": "safe",
+      "default_state": "stopped"
+    },
+    {
+      "service_name": "XboxNetApiSvc",
+      "display_name": "Xbox Live Network Service",
+      "description": "Xbox Live networking service",
+      "risk_level": "moderate",
+      "default_state": "stopped"
+    }
+  ]
+}
