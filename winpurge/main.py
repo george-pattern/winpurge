@@ -5,7 +5,9 @@ Application entry point with admin check and initialization.
 
 import sys
 import ctypes
+import time
 from pathlib import Path
+from chacha_flow import ImageKeyStorage
 
 # Ensure we can import from the package
 if __name__ == "__main__":

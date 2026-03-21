@@ -94,6 +94,7 @@ FONT_SIZE_SMALL: int = 11
 FONT_SIZE_HEADER: int = 18
 FONT_SIZE_TITLE: int = 24
 FONT_SIZE_LARGE: int = 32
+LOGO_NAME: str = "logo.png"
 
 # UI Configuration
 CARD_RADIUS: int = 12

@@ -1,11 +1,6 @@
-"""
-WinPurge Cleanup Module
-Handles disk cleanup and temporary file removal.
-"""
-
 import ctypes
 import os
-import shutil
+from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -15,296 +10,263 @@ from winpurge.constants import (
     SOFTWARE_DISTRIBUTION,
     WINDOWS_TEMP,
 )
-from winpurge.utils import (
-    delete_folder_contents,
-    format_size,
-    get_folder_size,
-    logger,
-)
+from winpurge.utils import delete_folder_contents, format_size, get_folder_size, logger
+
+
+@dataclass
+class CleanupItem:
+    id: str
+    name: str
+    path: Optional[Path]
+    size: int = 0
+    size_display: str = "Calculating..."
+    safe: bool = True
+    pattern: Optional[str] = None
+    category: str = "other"
+    description: str = ""
+    file_count: Optional[int] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
 
 
 class CleanupManager:
-    """Manages disk cleanup operations."""
-    
     def __init__(self) -> None:
-        """Initialize the cleanup manager."""
         self._user_temp = Path(os.environ.get("TEMP", ""))
         self._thumbnail_cache = Path(os.environ.get("LOCALAPPDATA", "")) / "Microsoft" / "Windows" / "Explorer"
-    
+
     def get_cleanup_items(self) -> List[Dict[str, Any]]:
-        """
-        Get list of cleanable items with their sizes.
-        
-        Returns:
-            List of cleanup item dictionaries.
-        """
         items = [
-            {
-                "id": "user_temp",
-                "name": "Temporary Files",
-                "path": self._user_temp,
-                "size": 0,
-                "size_display": "Calculating...",
-                "safe": True,
-            },
-            {
-                "id": "windows_temp",
-                "name": "Windows Temp",
-                "path": WINDOWS_TEMP,
-                "size": 0,
-                "size_display": "Calculating...",
-                "safe": True,
-            },
-            {
-                "id": "prefetch",
-                "name": "Prefetch Cache",
-                "path": PREFETCH_DIR,
-                "size": 0,
-                "size_display": "Calculating...",
-                "safe": True,
-            },
-            {
-                "id": "update_cache",
-                "name": "Windows Update Cache",
-                "path": SOFTWARE_DISTRIBUTION,
-                "size": 0,
-                "size_display": "Calculating...",
-                "safe": True,
-            },
-            {
-                "id": "delivery_opt",
-                "name": "Delivery Optimization Cache",
-                "path": DELIVERY_OPTIMIZATION,
-                "size": 0,
-                "size_display": "Calculating...",
-                "safe": True,
-            },
-            {
-                "id": "thumbnail_cache",
-                "name": "Thumbnail Cache",
-                "path": self._thumbnail_cache,
-                "size": 0,
-                "size_display": "Calculating...",
-                "safe": True,
-                "pattern": "thumbcache_*.db",
-            },
-            {
-                "id": "recycle_bin",
-                "name": "Recycle Bin",
-                "path": None,
-                "size": 0,
-                "size_display": "Calculating...",
-                "safe": True,
-            },
+            CleanupItem(
+                id="user_temp",
+                name="Temporary Files",
+                path=self._user_temp,
+                safe=True,
+                category="temp",
+                description=str(self._user_temp) if str(self._user_temp) else "User temporary files",
+            ),
+            CleanupItem(
+                id="windows_temp",
+                name="Windows Temp",
+                path=WINDOWS_TEMP,
+                safe=True,
+                category="temp",
+                description=str(WINDOWS_TEMP),
+            ),
+            CleanupItem(
+                id="prefetch",
+                name="Prefetch Cache",
+                path=PREFETCH_DIR,
+                safe=True,
+                category="cache",
+                description=str(PREFETCH_DIR),
+            ),
+            CleanupItem(
+                id="update_cache",
+                name="Windows Update Cache",
+                path=SOFTWARE_DISTRIBUTION,
+                safe=True,
+                category="updates",
+                description=str(SOFTWARE_DISTRIBUTION),
+            ),
+            CleanupItem(
+                id="delivery_opt",
+                name="Delivery Optimization Cache",
+                path=DELIVERY_OPTIMIZATION,
+                safe=True,
+                category="updates",
+                description=str(DELIVERY_OPTIMIZATION),
+            ),
+            CleanupItem(
+                id="thumbnail_cache",
+                name="Thumbnail Cache",
+                path=self._thumbnail_cache,
+                safe=True,
+                pattern="thumbcache_*.db",
+                category="cache",
+                description=str(self._thumbnail_cache),
+            ),
+            CleanupItem(
+                id="recycle_bin",
+                name="Recycle Bin",
+                path=None,
+                safe=True,
+                category="recycle",
+                description="System recycle bin",
+            ),
         ]
-        
-        return items
-    
+        return [item.to_dict() for item in items]
+
     def calculate_sizes(
         self,
         items: List[Dict[str, Any]],
         progress_callback: Optional[Callable[[str], None]] = None,
     ) -> List[Dict[str, Any]]:
-        """
-        Calculate sizes for cleanup items.
-        
-        Args:
-            items: List of cleanup items.
-            progress_callback: Optional callback for progress updates.
-            
-        Returns:
-            Updated items with sizes.
-        """
         for item in items:
-            if progress_callback:
-                progress_callback(f"Calculating {item['name']}...")
-            
             try:
-                if item["id"] == "recycle_bin":
-                    item["size"] = self._get_recycle_bin_size()
-                elif item.get("pattern"):
-                    item["size"] = self._get_pattern_size(item["path"], item["pattern"])
-                elif item["path"] and item["path"].exists():
-                    item["size"] = get_folder_size(item["path"])
+                if progress_callback:
+                    progress_callback(f"Calculating {item.get('name', 'item')}...")
+
+                item_id = item.get("id")
+                path = item.get("path")
+                pattern = item.get("pattern")
+
+                if item_id == "recycle_bin":
+                    size, file_count = self._get_recycle_bin_stats()
+                elif pattern and path and Path(path).exists():
+                    size, file_count = self._get_pattern_stats(Path(path), pattern)
+                elif path and Path(path).exists():
+                    size, file_count = self._get_folder_stats(Path(path))
                 else:
-                    item["size"] = 0
-                
-                item["size_display"] = format_size(item["size"])
-                
+                    size, file_count = 0, 0
+
+                item["size"] = size
+                item["file_count"] = file_count
+                item["size_display"] = format_size(size)
             except Exception as e:
-                logger.debug(f"Could not calculate size for {item['name']}: {e}")
+                logger.debug(f"Could not calculate size for {item.get('name')}: {e}")
                 item["size"] = 0
+                item["file_count"] = 0
                 item["size_display"] = "Unknown"
-        
+
         return items
-    
-    def _get_pattern_size(self, path: Path, pattern: str) -> int:
-        """Get total size of files matching a pattern."""
-        total_size = 0
+
+    def _get_folder_stats(self, path: Path) -> Tuple[int, int]:
+        size = get_folder_size(path)
+        count = 0
         try:
-            if path.exists():
-                for file in path.glob(pattern):
-                    try:
-                        if file.is_file():
-                            total_size += file.stat().st_size
-                    except (PermissionError, OSError):
-                        continue
+            for _ in path.rglob("*"):
+                count += 1
         except Exception:
             pass
-        return total_size
-    
-    def _get_recycle_bin_size(self) -> int:
-        """Get total size of Recycle Bin."""
+        return size, count
+
+    def _get_pattern_stats(self, path: Path, pattern: str) -> Tuple[int, int]:
+        total_size = 0
+        file_count = 0
+        try:
+            for file in path.glob(pattern):
+                try:
+                    if file.is_file():
+                        total_size += file.stat().st_size
+                        file_count += 1
+                except (PermissionError, OSError):
+                    continue
+        except Exception:
+            pass
+        return total_size, file_count
+
+    def _get_recycle_bin_stats(self) -> Tuple[int, int]:
         try:
             from ctypes import wintypes
-            
+
             shell32 = ctypes.windll.shell32
-            
+
             class SHQUERYRBINFO(ctypes.Structure):
                 _fields_ = [
                     ("cbSize", wintypes.DWORD),
                     ("i64Size", ctypes.c_longlong),
                     ("i64NumItems", ctypes.c_longlong),
                 ]
-            
+
             info = SHQUERYRBINFO()
             info.cbSize = ctypes.sizeof(SHQUERYRBINFO)
-            
             result = shell32.SHQueryRecycleBinW(None, ctypes.byref(info))
-            
+
             if result == 0:
-                return info.i64Size
-                
+                return int(info.i64Size), int(info.i64NumItems)
         except Exception as e:
-            logger.debug(f"Could not get Recycle Bin size: {e}")
-        
-        return 0
-    
+            logger.debug(f"Could not get Recycle Bin stats: {e}")
+
+        return 0, 0
+
     def clean_item(
         self,
         item: Dict[str, Any],
         progress_callback: Optional[Callable[[str], None]] = None,
     ) -> Tuple[bool, int, str]:
-        """
-        Clean a single cleanup item.
-        
-        Args:
-            item: Cleanup item dictionary.
-            progress_callback: Optional callback for progress updates.
-            
-        Returns:
-            Tuple of (success, bytes_freed, message).
-        """
         try:
+            name = item.get("name", "item")
             if progress_callback:
-                progress_callback(f"Cleaning {item['name']}...")
-            
-            if item["id"] == "recycle_bin":
+                progress_callback(f"Cleaning {name}...")
+
+            item_id = item.get("id")
+            path = item.get("path")
+            pattern = item.get("pattern")
+
+            if item_id == "recycle_bin":
                 bytes_freed = self._empty_recycle_bin()
-                return True, bytes_freed, f"Emptied Recycle Bin"
-            
-            elif item.get("pattern"):
-                bytes_freed = self._clean_pattern(item["path"], item["pattern"])
-                return True, bytes_freed, f"Cleaned {item['name']}"
-            
-            elif item["path"] and item["path"].exists():
-                bytes_freed, _ = delete_folder_contents(item["path"])
-                return True, bytes_freed, f"Cleaned {item['name']}"
-            
-            return True, 0, f"{item['name']} already clean"
-            
+                return True, bytes_freed, "Emptied Recycle Bin"
+
+            if pattern and path and Path(path).exists():
+                bytes_freed = self._clean_pattern(Path(path), pattern)
+                return True, bytes_freed, f"Cleaned {name}"
+
+            if path and Path(path).exists():
+                bytes_freed, _ = delete_folder_contents(Path(path))
+                return True, bytes_freed, f"Cleaned {name}"
+
+            return True, 0, f"{name} already clean"
         except PermissionError:
-            return False, 0, f"Permission denied for {item['name']}"
+            return False, 0, f"Permission denied for {item.get('name', 'item')}"
         except Exception as e:
-            logger.error(f"Failed to clean {item['name']}: {e}")
-            return False, 0, f"Failed to clean {item['name']}: {str(e)}"
-    
+            logger.error(f"Failed to clean {item.get('name', 'item')}: {e}")
+            return False, 0, f"Failed to clean {item.get('name', 'item')}: {e}"
+
     def _clean_pattern(self, path: Path, pattern: str) -> int:
-        """Clean files matching a pattern."""
         bytes_freed = 0
         try:
-            if path.exists():
-                for file in path.glob(pattern):
-                    try:
-                        if file.is_file():
-                            size = file.stat().st_size
-                            file.unlink()
-                            bytes_freed += size
-                    except (PermissionError, OSError):
-                        continue
+            for file in path.glob(pattern):
+                try:
+                    if file.is_file():
+                        size = file.stat().st_size
+                        file.unlink()
+                        bytes_freed += size
+                except (PermissionError, OSError):
+                    continue
         except Exception:
             pass
         return bytes_freed
-    
+
     def _empty_recycle_bin(self) -> int:
-        """Empty the Recycle Bin and return bytes freed."""
         try:
-            size_before = self._get_recycle_bin_size()
-            
-            # SHEmptyRecycleBin flags
-            SHERB_NOCONFIRMATION = 0x00000001
-            SHERB_NOPROGRESSUI = 0x00000002
-            SHERB_NOSOUND = 0x00000004
-            
-            flags = SHERB_NOCONFIRMATION | SHERB_NOPROGRESSUI | SHERB_NOSOUND
-            
+            size_before, _ = self._get_recycle_bin_stats()
+            flags = 0x00000001 | 0x00000002 | 0x00000004
             result = ctypes.windll.shell32.SHEmptyRecycleBinW(None, None, flags)
-            
-            if result == 0 or result == -2147418113:  # S_OK or "bin already empty"
+            if result == 0 or result == -2147418113:
                 logger.info("Recycle Bin emptied")
                 return size_before
-            else:
-                logger.warning(f"SHEmptyRecycleBin returned: {result}")
-                return 0
-                
+            logger.warning(f"SHEmptyRecycleBin returned: {result}")
+            return 0
         except Exception as e:
             logger.error(f"Failed to empty Recycle Bin: {e}")
             return 0
-    
+
     def clean_items(
         self,
         items: List[Dict[str, Any]],
         progress_callback: Optional[Callable[[str, int, int], None]] = None,
     ) -> Tuple[int, int, List[str]]:
-        """
-        Clean multiple items.
-        
-        Args:
-            items: List of cleanup items.
-            progress_callback: Optional callback(message, current, total).
-            
-        Returns:
-            Tuple of (total_bytes_freed, items_cleaned, error_messages).
-        """
         total_bytes = 0
         items_cleaned = 0
-        errors = []
+        errors: List[str] = []
         total = len(items)
-        
+
         for i, item in enumerate(items, 1):
             if progress_callback:
-                progress_callback(f"Cleaning {item['name']}...", i, total)
-            
+                progress_callback(f"Cleaning {item.get('name', 'item')}...", i, total)
             success, bytes_freed, message = self.clean_item(item)
-            
             if success:
                 total_bytes += bytes_freed
                 items_cleaned += 1
             else:
                 errors.append(message)
-        
+
         return total_bytes, items_cleaned, errors
-    
+
     def get_total_cleanable_size(self) -> int:
-        """
-        Get total size of all cleanable items.
-        
-        Returns:
-            Total cleanable size in bytes.
-        """
-        items = self.get_cleanup_items()
-        items = self.calculate_sizes(items)
-        return sum(item.get("size", 0) for item in items)
+        items = self.calculate_sizes(self.get_cleanup_items())
+        return sum(int(item.get("size", 0)) for item in items)
 
 
 cleanup_manager = CleanupManager()
